@@ -1,0 +1,706 @@
+# Auto-generated client for Vault API v9.3.0
+# Source: https://api.apis.guru/v2/specs/apideck.com/vault/9.3.0/openapi.json
+# Auth: --token flag or $env.VAULT_API_TOKEN
+
+const BASE_URL = "https://unify.apideck.com"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o VAULT_API_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "x-apideck-app-id" => { {headers: {x-apideck-app-id: $token_val}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["https://unify.apideck.com"] }
+def auth-scheme-completer [] { ["bearer" "x-apideck-app-id"] }
+
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "vault-authorize connectionsAuthorize" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Authorize
+#
+# GET /vault/authorize/{service_id}/{application_id}
+# operationId: connectionsAuthorize
+export def "vault-authorize connectionsAuthorize" [
+  service_id: string
+  application_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --state: string # An opaque value the applications adds to the initial request that the authorization server includes when redirecting the back to the application. This value must be used by the application to prevent CSRF attacks. (e.g. eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjb25zdW1lcl9pZCI6InRlc3RfdXNlcl9pZCIsInVuaWZpZWRfYXBpIjoiZGVmYXVsdCIsInNlcnZpY2VfaWQiOiJ0ZWFtbGVhZGVyIiwiYXBwbGljYXRpb25faWQiOiIxMTExIiwiaWF0IjoxNjIyMTI2Nzg3fQ.97_pn1UAXc7mctXBdr15czUNO1jjdQ9sJUOIE_Myzbk)
+  --redirect-uri: string # URL to redirect back to after authorization. When left empty the default configured redirect uri will be used. (e.g. http://example.com/integrations)
+  --scope: list # One or more OAuth scopes to request from the connector. OAuth scopes control the set of resources and operations that are allowed after authorization. Refer to the connector's documentation for the available scopes. (e.g. [openid, leads:write, profile:read])
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar") (serialize-qp "scope" $scope "ssv")] | flatten | str join "&"
+  let full_url = (build-url $base $"/vault/authorize/($service_id)/($application_id)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Callback
+#
+# GET /vault/callback
+# operationId: connectionsCallback
+export def "vault-callback connectionsCallback" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --state: string # An opaque value the applications adds to the initial request that the authorization server includes when redirecting the back to the application. This value must be used by the application to prevent CSRF attacks. (e.g. eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjb25zdW1lcl9pZCI6InRlc3RfdXNlcl9pZCIsInVuaWZpZWRfYXBpIjoiZGVmYXVsdCIsInNlcnZpY2VfaWQiOiJ0ZWFtbGVhZGVyIiwiYXBwbGljYXRpb25faWQiOiIxMTExIiwiaWF0IjoxNjIyMTI2Nzg3fQ.97_pn1UAXc7mctXBdr15czUNO1jjdQ9sJUOIE_Myzbk)
+  --code: string # An authorization code from the connector which Apideck Vault will later exchange for an access token. (e.g. g0ZGZmNjVmOWI)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "code" $code "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/vault/callback" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get all connections
+#
+# GET /vault/connections
+# operationId: connectionsAll
+export def "vault-connections connectionsAll" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api: string # Scope results to Unified API (e.g. crm)
+  --configured: oneof<nothing, bool> # Scopes results to connections that have been configured or not (e.g. true)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
+  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api" $api "scalar") (serialize-qp "configured" $configured "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/vault/connections" $qp)
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Deletes a connection
+#
+# DELETE /vault/connections/{unified_api}/{service_id}
+# operationId: connectionsDelete
+export def "vault-connections connectionsDelete" [
+  service_id: string
+  unified_api: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
+  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/vault/connections/($unified_api)/($service_id)")
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get connection
+#
+# GET /vault/connections/{unified_api}/{service_id}
+# operationId: connectionsOne
+export def "vault-connections connectionsOne" [
+  service_id: string
+  unified_api: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
+  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/vault/connections/($unified_api)/($service_id)")
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Update connection
+#
+# PATCH /vault/connections/{unified_api}/{service_id}
+# operationId: connectionsUpdate
+# --configuration item shape: {defaults?: list, resource?: string}
+# --form_fields item shape: {allow_custom_values?: bool, custom_field?: bool, description?: string, disabled?: bool, hidden?: bool, id?: string, label?: string, options?: list, placeholder?: string, prefix?: string, required?: bool, sensitive?: bool, suffix?: string, type?: "text"|"checkbox"|"tel"|"email"|"url"|"textarea"|"select"|"filtered-select"|"multi-select"|"datetime"|"date"|"time"|"number"}
+# --subscriptions item shape: {created_at?: string, downstream_event_types?: list, downstream_id?: string, execute_url?: string, unify_event_types?: list}
+export def "vault-connections connectionsUpdate" [
+  service_id: string
+  unified_api: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
+  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --configuration: list # item shape: {defaults?: list, resource?: string}
+  --enabled: oneof<nothing, bool> # Whether the connection is enabled or not. You can enable or disable a connection using the Update Connection API. (e.g. true)
+  --metadata: record # Attach your own consumer specific metadata (nullable, e.g. {account: {id: c01458a5-7276-41ce-bc19-639906b0450a, name: My Company}, plan: enterprise})
+  --settings: record # Connection settings. Values will persist to `form_fields` with corresponding id (nullable, e.g. {api_key: 12345xxxxxx, instance_url: https://eu28.salesforce.com})
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/vault/connections/($unified_api)/($service_id)")
+  let body = {configuration: $configuration, enabled: $enabled, metadata: $metadata, settings: $settings} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Create connection
+#
+# POST /vault/connections/{unified_api}/{service_id}
+# operationId: connectionsAdd
+# --configuration item shape: {defaults?: list, resource?: string}
+# --form_fields item shape: {allow_custom_values?: bool, custom_field?: bool, description?: string, disabled?: bool, hidden?: bool, id?: string, label?: string, options?: list, placeholder?: string, prefix?: string, required?: bool, sensitive?: bool, suffix?: string, type?: "text"|"checkbox"|"tel"|"email"|"url"|"textarea"|"select"|"filtered-select"|"multi-select"|"datetime"|"date"|"time"|"number"}
+# --subscriptions item shape: {created_at?: string, downstream_event_types?: list, downstream_id?: string, execute_url?: string, unify_event_types?: list}
+export def "vault-connections connectionsAdd" [
+  service_id: string
+  unified_api: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
+  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --configuration: list # item shape: {defaults?: list, resource?: string}
+  --enabled: oneof<nothing, bool> # Whether the connection is enabled or not. You can enable or disable a connection using the Update Connection API. (e.g. true)
+  --metadata: record # Attach your own consumer specific metadata (nullable, e.g. {account: {id: c01458a5-7276-41ce-bc19-639906b0450a, name: My Company}, plan: enterprise})
+  --settings: record # Connection settings. Values will persist to `form_fields` with corresponding id (nullable, e.g. {api_key: 12345xxxxxx, instance_url: https://eu28.salesforce.com})
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/vault/connections/($unified_api)/($service_id)")
+  let body = {configuration: $configuration, enabled: $enabled, metadata: $metadata, settings: $settings} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Import connection
+#
+# POST /vault/connections/{unified_api}/{service_id}/import
+# operationId: connectionsImport
+# --credentials shape: {access_token?: string, expires_in?: int, issued_at?: string, refresh_token: string}
+export def "vault-connections-import connectionsImport" [
+  service_id: string
+  unified_api: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
+  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --credentials: record # e.g. {access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c, refresh_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.cThIIoDvwdueQB468K5xDc5633seEFoqwxjF_xSJyQQ} — shape: {access_token?: string, expires_in?: int, issued_at?: string, refresh_token: string}
+  --metadata: record # Attach your own consumer specific metadata (nullable, e.g. {account: {id: c01458a5-7276-41ce-bc19-639906b0450a, name: My Company}, plan: enterprise})
+  --settings: record # Connection settings. Values will persist to `form_fields` with corresponding id (nullable, e.g. {instance_url: https://eu28.salesforce.com})
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/vault/connections/($unified_api)/($service_id)/import")
+  let body = {credentials: $credentials, metadata: $metadata, settings: $settings} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Get Access Token
+#
+# POST /vault/connections/{unified_api}/{service_id}/token
+# operationId: connectionsToken
+export def "vault-connections-token connectionsToken" [
+  service_id: string
+  unified_api: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
+  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --body: record
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/vault/connections/($unified_api)/($service_id)/token")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Get resource settings
+#
+# GET /vault/connections/{unified_api}/{service_id}/{resource}/config
+# operationId: connectionSettingsAll
+export def "vault-connections-config connectionSettingsAll" [
+  unified_api: string
+  service_id: string
+  resource: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
+  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/vault/connections/($unified_api)/($service_id)/($resource)/config")
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Update settings
+#
+# PATCH /vault/connections/{unified_api}/{service_id}/{resource}/config
+# operationId: connectionSettingsUpdate
+# --configuration item shape: {defaults?: list, resource?: string}
+# --form_fields item shape: {allow_custom_values?: bool, custom_field?: bool, description?: string, disabled?: bool, hidden?: bool, id?: string, label?: string, options?: list, placeholder?: string, prefix?: string, required?: bool, sensitive?: bool, suffix?: string, type?: "text"|"checkbox"|"tel"|"email"|"url"|"textarea"|"select"|"filtered-select"|"multi-select"|"datetime"|"date"|"time"|"number"}
+# --subscriptions item shape: {created_at?: string, downstream_event_types?: list, downstream_id?: string, execute_url?: string, unify_event_types?: list}
+export def "vault-connections-config connectionSettingsUpdate" [
+  service_id: string
+  unified_api: string
+  resource: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
+  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --configuration: list # item shape: {defaults?: list, resource?: string}
+  --enabled: oneof<nothing, bool> # Whether the connection is enabled or not. You can enable or disable a connection using the Update Connection API. (e.g. true)
+  --metadata: record # Attach your own consumer specific metadata (nullable, e.g. {account: {id: c01458a5-7276-41ce-bc19-639906b0450a, name: My Company}, plan: enterprise})
+  --settings: record # Connection settings. Values will persist to `form_fields` with corresponding id (nullable, e.g. {api_key: 12345xxxxxx, instance_url: https://eu28.salesforce.com})
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/vault/connections/($unified_api)/($service_id)/($resource)/config")
+  let body = {configuration: $configuration, enabled: $enabled, metadata: $metadata, settings: $settings} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Get all consumers
+#
+# GET /vault/consumers
+# operationId: consumersAll
+export def "vault-consumers consumersAll" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
+  --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
+  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/vault/consumers" $qp)
+  let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Create consumer
+#
+# POST /vault/consumers
+# operationId: consumersAdd
+# --connections item shape: {consumer_id?: string, created_at?: string, enabled?: bool, icon?: string, logo?: string, metadata?: record, name?: string, service_id?: string, settings?: record, state?: "available"|"callable"|"added"|"configured"|"authorized", unified_api?: string, updated_at?: string}
+# --metadata shape: {account_name?: string, email?: string, image?: string, user_name?: string}
+# --request_counts shape: {proxy?: float, unify?: float, vault?: float}
+export def "vault-consumers consumersAdd" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  consumer_id: string # Unique consumer identifier. You can freely choose a consumer ID yourself. Most of the time, this is an ID of your internal data model that represents a user or account in your system (for example account:12345). If the consumer doesn't exist yet, Vault will upsert a consumer based on your ID. (e.g. test_consumer_id)
+  --metadata: record # The metadata of the consumer. This is used to display the consumer in the sidebar. This is optional, but recommended. — shape: {account_name?: string, email?: string, image?: string, user_name?: string}
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/vault/consumers")
+  let body = {consumer_id: $consumer_id, metadata: $metadata} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Delete consumer
+#
+# DELETE /vault/consumers/{consumer_id}
+# operationId: consumersDelete
+export def "vault-consumers consumersDelete" [
+  consumer_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/vault/consumers/($consumer_id)")
+  let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get consumer
+#
+# GET /vault/consumers/{consumer_id}
+# operationId: consumersOne
+export def "vault-consumers consumersOne" [
+  consumer_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/vault/consumers/($consumer_id)")
+  let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Update consumer
+#
+# PATCH /vault/consumers/{consumer_id}
+# operationId: consumersUpdate
+# --metadata shape: {account_name?: string, email?: string, image?: string, user_name?: string}
+export def "vault-consumers consumersUpdate" [
+  consumer_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --metadata: record # The metadata of the consumer. This is used to display the consumer in the sidebar. This is optional, but recommended. — shape: {account_name?: string, email?: string, image?: string, user_name?: string}
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/vault/consumers/($consumer_id)")
+  let body = {metadata: $metadata} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Consumer request counts
+#
+# GET /vault/consumers/{consumer_id}/stats
+# operationId: consumerRequestCountsAll
+export def "vault-consumers-stats consumerRequestCountsAll" [
+  consumer_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --start-datetime: string # Scopes results to requests that happened after datetime (e.g. 2021-05-01T12:00:00.000Z)
+  --end-datetime: string # Scopes results to requests that happened before datetime (e.g. 2021-05-30T12:00:00.000Z)
+  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "start_datetime" $start_datetime "scalar") (serialize-qp "end_datetime" $end_datetime "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/vault/consumers/($consumer_id)/stats" $qp)
+  let extra_headers = {"x-apideck-app-id": $x_apideck_app_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get all consumer request logs
+#
+# GET /vault/logs
+# operationId: logsAll
+export def "vault-logs logsAll" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --filter: record # Filter results
+  --cursor: string # Cursor to start from. You can find cursors for next/previous pages in the meta.cursors property of the response. (nullable)
+  --limit: int # Number of results to return. Minimum 1, Maximum 200, Default 20 (default: 20)
+  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "filter" $filter "deepObject") (serialize-qp "cursor" $cursor "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/vault/logs" $qp)
+  let extra_headers = {"x-apideck-app-id": $x_apideck_app_id, "x-apideck-consumer-id": $x_apideck_consumer_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Revoke connection
+#
+# GET /vault/revoke/{service_id}/{application_id}
+# operationId: connectionsRevoke
+export def "vault-revoke connectionsRevoke" [
+  service_id: string
+  application_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --state: string # An opaque value the applications adds to the initial request that the authorization server includes when redirecting the back to the application. This value must be used by the application to prevent CSRF attacks. (e.g. eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjb25zdW1lcl9pZCI6InRlc3RfdXNlcl9pZCIsInVuaWZpZWRfYXBpIjoiZGVmYXVsdCIsInNlcnZpY2VfaWQiOiJ0ZWFtbGVhZGVyIiwiYXBwbGljYXRpb25faWQiOiIxMTExIiwiaWF0IjoxNjIyMTI2Nzg3fQ.97_pn1UAXc7mctXBdr15czUNO1jjdQ9sJUOIE_Myzbk)
+  --redirect-uri: string # URL to redirect back to after authorization. When left empty the default configured redirect uri will be used. (e.g. http://example.com/integrations)
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/vault/revoke/($service_id)/($application_id)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Create Session
+#
+# POST /vault/sessions
+# operationId: sessionsCreate
+# --consumer_metadata shape: {account_name?: string, email?: string, image?: string, user_name?: string}
+# --settings shape: {allow_actions?: list, auto_redirect?: bool, hide_guides?: bool, hide_resource_settings?: bool, isolation_mode?: bool, sandbox_mode?: bool, session_length?: string, show_logs?: bool, show_sidebar?: bool, show_suggestions?: bool, unified_apis?: list}
+# --theme shape: {favicon?: string, logo?: string, primary_color?: string, privacy_url?: string, sidepanel_background_color?: string, sidepanel_text_color?: string, terms_url?: string, vault_name?: string}
+export def "vault-sessions sessionsCreate" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from
+  --x-apideck-app-id: string # The ID of your Unify application (e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
+  --consumer-metadata: record # The metadata of the consumer. This is used to display the consumer in the sidebar. This is optional, but recommended. — shape: {account_name?: string, email?: string, image?: string, user_name?: string}
+  --custom-consumer-settings: record # Custom consumer settings that are passed as part of the session. (e.g. {feature_flag_1: true, tax_rates: [{id: 6, label: 6%}, {id: 21, label: 21%}]})
+  --redirect-uri: string # The URL to redirect the user to after the session has been configured. (e.g. https://mysaas.com/dashboard)
+  --settings: record # Settings to change the way the Vault is displayed. — shape: {allow_actions?: list, auto_redirect?: bool, hide_guides?: bool, hide_resource_settings?: bool, isolation_mode?: bool, sandbox_mode?: bool, session_length?: string, show_logs?: bool, show_sidebar?: bool, show_suggestions?: bool, unified_apis?: list}
+  --theme: record # Theming options to change the look and feel of Vault. — shape: {favicon?: string, logo?: string, primary_color?: string, privacy_url?: string, sidepanel_background_color?: string, sidepanel_text_color?: string, terms_url?: string, vault_name?: string}
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/vault/sessions")
+  let body = {consumer_metadata: $consumer_metadata, custom_consumer_settings: $custom_consumer_settings, redirect_uri: $redirect_uri, settings: $settings, theme: $theme} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"x-apideck-consumer-id": $x_apideck_consumer_id, "x-apideck-app-id": $x_apideck_app_id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}

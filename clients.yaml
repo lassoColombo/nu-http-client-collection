@@ -136,6 +136,135 @@ clients:
     - name: google-dialogflow
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/dialogflow/v3beta1/openapi.json
+    - name: aws-lex-models
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/lex-models/2017-04-19/openapi.json
+    - name: aws-machinelearning
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/machinelearning/2014-12-12/openapi.json
+    - name: aws-personalize
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/personalize/2018-05-22/openapi.json
+    - name: aws-polly
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/polly/2016-06-10/openapi.json
+    - name: aws-rekognition
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/rekognition/2016-06-27/openapi.json
+    - name: aws-sagemaker
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/sagemaker/2017-07-24/openapi.json
+    - name: aws-textract
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/textract/2018-06-27/openapi.json
+    - name: google-ai-platform
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/ml/v1/openapi.json
+    - name: google-automl
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/automl/v1beta1/openapi.json
+    - name: google-vision-apisguru
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/vision/v1/openapi.json
+    - name: google-dlp
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/dlp/v2/openapi.json
+    - name: google-firebaseml
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/firebaseml/v1beta2/openapi.json
+    - name: google-speech
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/speech/v2beta1/openapi.json
+    - name: google-texttospeech
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/texttospeech/v1beta1/openapi.json
+    - name: azure-cognitive-anomaly-detector
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/cognitiveservices-AnomalyDetector/1.0/swagger.json
+    - name: azure-cognitive-anomaly-finder
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/cognitiveservices-AnomalyFinder/2.0/swagger.json
+    - name: azure-cognitive-content-moderator
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/cognitiveservices-ContentModerator/1.0/swagger.json
+    - name: azure-cognitive-face
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/cognitiveservices-Face/1.0/swagger.json
+    - name: azure-cognitive-form-recognizer
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/cognitiveservices-FormRecognizer/2.0-preview/swagger.json
+    - name: azure-cognitive-ink-recognizer
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/cognitiveservices-InkRecognizer/1.0/swagger.json
+    - name: azure-cognitive-luis-authoring
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/cognitiveservices-LUIS-Authoring/3.0-preview/swagger.json
+    - name: azure-cognitive-luis-programmatic
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/cognitiveservices-LUIS-Programmatic/v2.0/swagger.json
+    - name: azure-cognitive-personalizer
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/cognitiveservices-Personalizer/v1.0/swagger.json
+    - name: azure-cognitive-qnamaker
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/cognitiveservices-QnAMaker/4.0/swagger.json
+    - name: azure-cognitive-text-analytics
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/cognitiveservices-TextAnalytics/v2.1-preview/swagger.json
+    - name: azure-machinelearning-webservices
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/machinelearning-webservices/2017-01-01/swagger.json
+    - name: azure-machinelearning-workspaces
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/machinelearning-workspaces/2019-10-01/swagger.json
+    - name: cloudmersive-ocr
+      type: openapi
+      source: https://api.apis.guru/v2/specs/cloudmersive.com/ocr/v1/openapi.json
+    - name: deeparteffects
+      type: openapi
+      source: https://api.apis.guru/v2/specs/deeparteffects.com/2017-02-10T162446Z/swagger.json
+    - name: logoraisr
+      type: openapi
+      source: https://api.apis.guru/v2/specs/logoraisr.com/v1/openapi.json
+    - name: moderatecontent
+      type: openapi
+      source: https://api.apis.guru/v2/specs/moderatecontent.com/1.0.0/swagger.json
+    - name: ms-cognitive-autosuggest
+      type: openapi
+      source: https://api.apis.guru/v2/specs/microsoft.com/cognitiveservices-AutoSuggest/1.0/swagger.json
+    - name: ms-cognitive-prediction
+      type: openapi
+      source: https://api.apis.guru/v2/specs/microsoft.com/cognitiveservices-Prediction/3.0/openapi.json
+    - name: ms-cognitive-training
+      type: openapi
+      source: https://api.apis.guru/v2/specs/microsoft.com/cognitiveservices-Training/3.2/openapi.json
+    - name: rapidapi-language-identification
+      type: openapi
+      source: https://api.apis.guru/v2/specs/rapidapi.com/language-identification/1.0.0/swagger.json
+    - name: seldon-core
+      type: openapi
+      source: https://api.apis.guru/v2/specs/seldon.local/core/0.1/openapi.json
+    - name: seldon-engine
+      type: openapi
+      source: https://api.apis.guru/v2/specs/seldon.local/engine/0.1/openapi.json
+    - name: seldon-wrapper
+      type: openapi
+      source: https://api.apis.guru/v2/specs/seldon.local/wrapper/0.1/openapi.json
+    - name: symanto
+      type: openapi
+      source: https://api.apis.guru/v2/specs/symanto.net/1.0/openapi.json
+    - name: taggun
+      type: openapi
+      source: https://api.apis.guru/v2/specs/taggun.io/1.10.9/swagger.json
+    - name: text2data
+      type: openapi
+      source: https://api.apis.guru/v2/specs/text2data.org/v3.4/swagger.json
+    - name: tsapi-cognitive
+      type: openapi
+      source: https://api.apis.guru/v2/specs/tsapi.net/v1/openapi.json
+    - name: google-tpu
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/tpu/v2/openapi.json
   analytics:
     - name: google-analytics
       type: openapi
@@ -185,6 +314,21 @@ clients:
     - name: google-fcmdata-analytics
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/fcmdata/v1beta1/openapi.json
+    - name: google-firebase
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/firebase/v1beta1/openapi.json
+    - name: journy-io
+      type: openapi
+      source: https://api.apis.guru/v2/specs/journy.io/1.0.0/openapi.json
+    - name: statsocial
+      type: openapi
+      source: https://api.apis.guru/v2/specs/statsocial.com/1.0.0/openapi.json
+    - name: azure-powerbi-dedicated
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/powerbidedicated/2017-10-01/swagger.json
+    - name: azure-powerbi-embedded
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/powerbiembedded/2016-01-29/swagger.json
 
   advertising:
     - name: google-ad-exchange-buyer
@@ -223,6 +367,18 @@ clients:
     - name: postmark-account
       type: openapi
       source: https://api.apis.guru/v2/specs/postmarkapp.com/account/0.9.0/swagger.json
+    - name: google-admob
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/admob/v1beta/openapi.json
+    - name: google-displayvideo
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/displayvideo/v2/openapi.json
+    - name: google-reseller
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/reseller/v1/openapi.json
+    - name: google-tagmanager
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/tagmanager/v2/openapi.json
 
   anime:
     - name: anilist
@@ -293,6 +449,9 @@ clients:
     - name: metronome
       type: openapi
       source: https://docs.metronome.com/openapi.json
+    - name: azure-consumption
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/consumption/2019-06-01/swagger.json
 
   blockchain:
     - name: alchemy-nft
@@ -478,6 +637,30 @@ clients:
     - name: google-fcm
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/fcm/v1/openapi.json
+    - name: aws-chime
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/chime/2018-05-01/openapi.json
+    - name: aws-sns
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/sns/2010-03-31/openapi.json
+    - name: aws-sqs
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/sqs/2012-11-05/openapi.json
+    - name: azure-signalr
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/signalr/2018-10-01/swagger.json
+    - name: aws-connect
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/connect/2017-08-08/openapi.json
+    - name: aws-connect-contact-lens
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/connect-contact-lens/2020-08-21/openapi.json
+    - name: circuitsandbox
+      type: openapi
+      source: https://api.apis.guru/v2/specs/circuitsandbox.net/2.9.235/openapi.json
+    - name: intercom-210
+      type: openapi
+      source: https://raw.githubusercontent.com/intercom/Intercom-OpenAPI/main/descriptions/2.10/api.intercom.io.yaml
 
   ci-cd:
     - name: circleci
@@ -568,6 +751,57 @@ clients:
     - name: azure-automation-runbook
       type: openapi
       source: https://api.apis.guru/v2/specs/azure.com/automation-runbook/2018-06-30/swagger.json
+    - name: aws-cloudformation
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/cloudformation/2010-05-15/openapi.json
+    - name: google-firebase-app-distribution
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/firebaseappdistribution/v1/openapi.json
+    - name: aws-apigateway
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/apigateway/2015-07-09/openapi.json
+    - name: aws-apigatewayv2
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/apigatewayv2/2018-11-29/openapi.json
+    - name: azure-apimanagement
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/apimanagement/2018-01-01/swagger.json
+    - name: azure-appconfiguration
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/appconfiguration/2019-11-01-preview/swagger.json
+    - name: azure-automation-connection
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/automation-connection/2015-10-31/swagger.json
+    - name: azure-automation-credential
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/automation-credential/2015-10-31/swagger.json
+    - name: azure-automation-dsc-configuration
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/automation-dscConfiguration/2015-10-31/swagger.json
+    - name: azure-automation-dsc-node
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/automation-dscNode/2018-01-15/swagger.json
+    - name: azure-automation-module
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/automation-module/2015-10-31/swagger.json
+    - name: azure-automation-variable
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/automation-variable/2015-10-31/swagger.json
+    - name: azure-automation-watcher
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/automation-watcher/2015-10-31/swagger.json
+    - name: azure-automation-webhook
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/automation-webhook/2015-10-31/swagger.json
+    - name: peel-ci
+      type: openapi
+      source: https://api.apis.guru/v2/specs/peel-ci.com/1.0.0/swagger.json
+    - name: redhat-patchman
+      type: openapi
+      source: https://api.apis.guru/v2/specs/redhat.local/patchman-engine/v1.15.3/openapi.json
+    - name: turbinelabs
+      type: openapi
+      source: https://api.apis.guru/v2/specs/turbinelabs.io/1.0/swagger.json
 
   cloud:
     - name: render
@@ -627,6 +861,9 @@ clients:
     - name: zeit-co
       type: openapi
       source: https://api.apis.guru/v2/specs/zeit.co/v2019-01-07/openapi.json
+    - name: clever-cloud-apisguru
+      type: openapi
+      source: https://api.apis.guru/v2/specs/clever-cloud.com/1.0.0/openapi.json
 
   commerce:
     - name: square
@@ -746,6 +983,48 @@ clients:
     - name: papinet-order-status
       type: openapi
       source: https://api.apis.guru/v2/specs/papinet.io/order_status/1.0.0/openapi.json
+    - name: ebay-buy-deal
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ebay.com/buy-deal/v1.3.0/openapi.json
+    - name: ebay-buy-feed
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ebay.com/buy-feed/v1_beta.34.0/openapi.json
+    - name: ebay-commerce-charity
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ebay.com/commerce-charity/v1.2.1/openapi.json
+    - name: ebay-commerce-identity
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apiz.ebay.com/commerce-identity/v1.1.0/openapi.json
+    - name: ebay-developer-analytics
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ebay.com/developer-analytics/v1_beta.0.0/openapi.json
+    - name: ebay-finances
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apiz.ebay.com/sell-finances/v1.15.0/openapi.json
+    - name: ebay-sell-account
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ebay.com/sell-account/v1.9.0/openapi.json
+    - name: ebay-sell-analytics
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ebay.com/sell-analytics/1.2.0/openapi.json
+    - name: ebay-sell-feed
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ebay.com/sell-feed/v1.3.1/openapi.json
+    - name: ebay-sell-listing
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ebay.com/sell-listing/v1_beta.3.0/openapi.json
+    - name: ebay-sell-metadata
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ebay.com/sell-metadata/v1.6.0/openapi.json
+    - name: ebay-sell-negotiation
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ebay.com/sell-negotiation/v1.1.0/openapi.json
+    - name: ebay-sell-recommendation
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ebay.com/sell-recommendation/1.1.0/openapi.json
+    - name: redhat-catalog-inventory
+      type: openapi
+      source: https://api.apis.guru/v2/specs/redhat.com/catalog_inventory/1.0.0/openapi.json
 
   container-orchestration:
     - name: kubernetes
@@ -837,6 +1116,24 @@ clients:
     - name: cilium
       type: openapi
       source: https://raw.githubusercontent.com/cilium/cilium/main/api/v1/openapi.yaml
+    - name: aws-ecr
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/ecr/2015-09-21/openapi.json
+    - name: aws-ecr-public
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/ecr-public/2020-10-30/openapi.json
+    - name: kubernetes-apisguru
+      type: openapi
+      source: https://api.apis.guru/v2/specs/kubernetes.io/unversioned/swagger.json
+    - name: ibm-bluemix-containers
+      type: openapi
+      source: https://api.apis.guru/v2/specs/bluemix.net/containers/3.0.0/openapi.json
+    - name: windows-net-batch
+      type: openapi
+      source: https://api.apis.guru/v2/specs/windows.net/batch-BatchService/2018-08-01.7.0/swagger.json
+    - name: azure-appplatform
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/appplatform/2019-05-01-preview/swagger.json
   containers:
     - name: docker
       type: openapi
@@ -871,6 +1168,12 @@ clients:
     - name: anchore-io
       type: openapi
       source: https://api.apis.guru/v2/specs/anchore.io/0.1.20/openapi.json
+    - name: docker-dvp
+      type: openapi
+      source: https://api.apis.guru/v2/specs/docker.com/dvp/1.0.0/openapi.json
+    - name: docker-engine
+      type: openapi
+      source: https://api.apis.guru/v2/specs/docker.com/engine/1.33/openapi.json
   crm:
     - name: hubspot-crm
       type: openapi
@@ -950,6 +1253,40 @@ clients:
     - name: personio-personnel
       type: openapi
       source: https://api.apis.guru/v2/specs/personio.de/personnel/1.0/openapi.json
+    - name: apideck-ats
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apideck.com/ats/9.3.0/openapi.json
+    - name: apideck-connector
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apideck.com/connector/9.3.0/openapi.json
+    - name: apideck-ecommerce
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apideck.com/ecommerce/9.3.0/openapi.json
+    - name: apideck-ecosystem
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apideck.com/ecosystem/0.0.6/openapi.json
+    - name: apideck-hris
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apideck.com/hris/9.3.0/openapi.json
+    - name: apideck-lead
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apideck.com/lead/9.3.0/openapi.json
+    - name: apideck-pos
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apideck.com/pos/9.3.0/openapi.json
+    - name: apideck-proxy
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apideck.com/proxy/9.3.0/openapi.json
+    - name: apideck-vault
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apideck.com/vault/9.3.0/openapi.json
+    - name: xero-payroll-au
+      type: openapi
+      source: https://api.apis.guru/v2/specs/xero.com/xero-payroll-au/2.9.4/openapi.json
+    - name: hubspot-business-units
+      type: openapi
+      source: https://api.apis.guru/v2/specs/hubapi.com/business%20units/v3/openapi.json
+
   data-pipeline:
     - name: airflow
       type: openapi
@@ -1023,6 +1360,87 @@ clients:
     - name: google-datacatalog
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/datacatalog/v1beta1/openapi.json
+    - name: aws-emr
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/elasticmapreduce/2009-03-31/openapi.json
+    - name: aws-glue
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/glue/2017-03-31/openapi.json
+    - name: aws-kinesis
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/kinesis/2013-12-02/openapi.json
+    - name: aws-kinesis-analytics
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/kinesisanalyticsv2/2018-05-23/openapi.json
+    - name: aws-mq
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/mq/2017-11-27/openapi.json
+    - name: aws-mwaa
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/mwaa/2020-07-01/openapi.json
+    - name: aws-datasync
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/datasync/2018-11-09/openapi.json
+    - name: azure-eventgrid
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/eventgrid-EventGrid/2019-06-01/swagger.json
+    - name: azure-eventhub
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/eventhub-EventHub/2017-04-01/swagger.json
+    - name: azure-servicebus
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/servicebus/2017-04-01/swagger.json
+    - name: azure-stream-analytics
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/streamanalytics-functions/2016-03-01/swagger.json
+    - name: apache-qakka
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apache.org/qakka/v1/openapi.json
+    - name: apache-superset
+      type: openapi
+      source: https://api.apis.guru/v2/specs/superset.apache.local/superset/v1/openapi.json
+    - name: aws-appflow
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/appflow/2020-08-23/openapi.json
+    - name: azure-databricks
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/databricks/2018-04-01/swagger.json
+    - name: azure-datafactory
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/datafactory/2018-06-01/swagger.json
+    - name: azure-datalake-analytics
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/datalake-analytics-account/2016-11-01/swagger.json
+    - name: azure-datalake-store
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/datalake-store-account/2016-11-01/swagger.json
+    - name: azure-hdinsight-cluster
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/hdinsight-cluster/2018-06-01-preview/swagger.json
+    - name: azure-logic
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/logic/2019-05-01/swagger.json
+    - name: ix-api
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ix-api.net/2.1.0/openapi.json
+    - name: maif-otoroshi
+      type: openapi
+      source: https://api.apis.guru/v2/specs/maif.local/otoroshi/1.5.0-dev/openapi.json
+    - name: mercure
+      type: openapi
+      source: https://api.apis.guru/v2/specs/mercure.local/0.3.2/openapi.json
+    - name: stoplight-apisguru
+      type: openapi
+      source: https://api.apis.guru/v2/specs/stoplight.io/api-v1/openapi.json
+    - name: swagger-io-generator
+      type: openapi
+      source: https://api.apis.guru/v2/specs/swagger.io/generator/2.4.30/swagger.json
+    - name: swaggerhub
+      type: openapi
+      source: https://api.apis.guru/v2/specs/swaggerhub.com/1.0.66/swagger.json
+    - name: azure-datashare
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/datashare-DataShare/2019-11-01/swagger.json
 
   database:
     - name: snowflake-account
@@ -1067,6 +1485,60 @@ clients:
     - name: google-sqladmin
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/sqladmin/v1/openapi.json
+    - name: aws-dynamodb
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/dynamodb/2012-08-10/openapi.json
+    - name: aws-elasticache
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/elasticache/2015-02-02/openapi.json
+    - name: aws-neptune
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/neptune/2014-10-31/openapi.json
+    - name: aws-rds
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/rds/2014-10-31/openapi.json
+    - name: aws-rds-data
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/rds-data/2018-08-01/openapi.json
+    - name: aws-redshift
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/redshift/2012-12-01/openapi.json
+    - name: aws-timestream-query
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/timestream-query/2018-11-01/openapi.json
+    - name: aws-timestream-write
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/timestream-write/2018-11-01/openapi.json
+    - name: azure-cosmos-db
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/cosmos-db/2019-08-01/swagger.json
+    - name: google-bigquery-connection
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/bigqueryconnection/v1beta1/openapi.json
+    - name: google-bigquery-reservation
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/bigqueryreservation/v1beta1/openapi.json
+    - name: google-bigtable-admin
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/bigtableadmin/v2/openapi.json
+    - name: aws-qldb
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/qldb/2019-01-02/openapi.json
+    - name: azure-redis
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/redis/2018-03-01/swagger.json
+    - name: google-firebase-database
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/firebasedatabase/v1beta/openapi.json
+    - name: google-firestore
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/firestore/v1beta2/openapi.json
+    - name: datasette
+      type: openapi
+      source: https://api.apis.guru/v2/specs/datasette.local/v1/openapi.json
+    - name: openlinksw-osdb
+      type: openapi
+      source: https://api.apis.guru/v2/specs/openlinksw.com/osdb/1.0.0/openapi.json
 
   dns:
     - name: aws-route53
@@ -1108,6 +1580,22 @@ clients:
     - name: domainsdb
       type: openapi
       source: https://api.apis.guru/v2/specs/domainsdb.info/1.0/openapi.json
+    - name: godaddy-aftermarket
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ote-godaddy.com/aftermarket/1.0.0/openapi.json
+    - name: godaddy-agreements
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ote-godaddy.com/agreements/1.0.0/openapi.json
+    - name: godaddy-certificates
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ote-godaddy.com/certificates/1.0.0/openapi.json
+    - name: godaddy-countries
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ote-godaddy.com/countries/1.0.0/openapi.json
+    - name: godaddy-orders
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ote-godaddy.com/orders/1.0.0/openapi.json
+
   email:
     - name: sendgrid
       type: openapi
@@ -1154,6 +1642,13 @@ clients:
     - name: scrapewebsite
       type: openapi
       source: https://api.apis.guru/v2/specs/scrapewebsite.email/0.1/swagger.json
+    - name: aws-sesv2
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/sesv2/2019-09-27/openapi.json
+    - name: inboxroute
+      type: openapi
+      source: https://api.apis.guru/v2/specs/inboxroute.com/0.9/swagger.json
+
   error-tracking:
     - name: sentry
       type: openapi
@@ -1228,9 +1723,6 @@ clients:
     - name: unleash
       type: openapi
       source: https://docs.getunleash.io/api/openapi.json
-    - name: statsig
-      type: openapi
-      source: https://docs.statsig.com/openapi.json
     - name: devcycle
       type: openapi
       source: https://api.devcycle.com/openapi.json
@@ -1523,6 +2015,45 @@ clients:
     - name: nebl
       type: openapi
       source: https://api.apis.guru/v2/specs/nebl.io/1.3.0/openapi.json
+    - name: mastercard-currency-conversion
+      type: openapi
+      source: https://api.apis.guru/v2/specs/mastercard.com/CurrencyConversionCalculator/1.0.0/swagger.json
+    - name: mastercard-masterpassqr
+      type: openapi
+      source: https://api.apis.guru/v2/specs/mastercard.com/masterpassqr/V1/swagger.json
+    - name: mastercard-maws
+      type: openapi
+      source: https://api.apis.guru/v2/specs/mastercard.com/MAWS/1.1.0/swagger.json
+    - name: mastercard-repower
+      type: openapi
+      source: https://api.apis.guru/v2/specs/mastercard.com/Repower/V2/swagger.json
+    - name: bunq
+      type: openapi
+      source: https://api.apis.guru/v2/specs/bunq.com/1.0/openapi.json
+    - name: nordigen-apisguru
+      type: openapi
+      source: https://api.apis.guru/v2/specs/nordigen.com/2.0%20%28v2%29/openapi.json
+    - name: openbanking-event-notifications
+      type: openapi
+      source: https://api.apis.guru/v2/specs/openbanking.org.uk/event-notifications-openapi/3.1.7/openapi.json
+    - name: tokenmetrics
+      type: openapi
+      source: https://api.apis.guru/v2/specs/tokenmetrics.com/1.0.0/openapi.json
+    - name: whapi-accounts
+      type: openapi
+      source: https://api.apis.guru/v2/specs/whapi.com/accounts/2.0.0/swagger.json
+    - name: whapi-bets
+      type: openapi
+      source: https://api.apis.guru/v2/specs/whapi.com/bets/2.0.0/openapi.json
+    - name: whapi-locations
+      type: openapi
+      source: https://api.apis.guru/v2/specs/whapi.com/locations/2.0/swagger.json
+    - name: whapi-numbers
+      type: openapi
+      source: https://api.apis.guru/v2/specs/whapi.com/numbers/2.0/swagger.json
+    - name: whapi-sessions
+      type: openapi
+      source: https://api.apis.guru/v2/specs/whapi.com/sessions/2.0.0/swagger.json
 
   forms:
     - name: google-forms
@@ -1628,6 +2159,40 @@ clients:
     - name: google-slides
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/slides/v1/openapi.json
+    - name: google-docs
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/docs/v1/openapi.json
+    - name: google-sheets
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/sheets/v4/openapi.json
+    - name: api2pdf
+      type: openapi
+      source: https://api.apis.guru/v2/specs/api2pdf.com/1.0.0/openapi.json
+    - name: easypdfserver
+      type: openapi
+      source: https://api.apis.guru/v2/specs/easypdfserver.com/1/openapi.json
+    - name: magick-nu
+      type: openapi
+      source: https://api.apis.guru/v2/specs/magick.nu/1.0/swagger.json
+    - name: presalytics-converter
+      type: openapi
+      source: https://api.apis.guru/v2/specs/presalytics.io/converter/0.1/openapi.json
+    - name: presalytics-ooxml
+      type: openapi
+      source: https://api.apis.guru/v2/specs/presalytics.io/ooxml/0.1.0/openapi.json
+    - name: rapidapi-dynamicdocs
+      type: openapi
+      source: https://api.apis.guru/v2/specs/rapidapi.com/dynamicdocs/1.0/openapi.json
+    - name: scideas-regression
+      type: openapi
+      source: https://api.apis.guru/v2/specs/scideas.net/regression/1.0/openapi.json
+    - name: va-gov-benefits-apisguru
+      type: openapi
+      source: https://api.apis.guru/v2/specs/va.gov/benefits/1.0.0/openapi.json
+    - name: va-gov-confirmation-apisguru
+      type: openapi
+      source: https://api.apis.guru/v2/specs/va.gov/confirmation/0.0.1/openapi.json
+
   fraud:
     - name: aws-fraud-detector
       type: openapi
@@ -1714,6 +2279,36 @@ clients:
     - name: mailboxvalidator-checker
       type: openapi
       source: https://api.apis.guru/v2/specs/mailboxvalidator.com/checker/1.0.0/openapi.json
+    - name: aws-detective
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/detective/2018-10-26/openapi.json
+    - name: aws-guardduty
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/guardduty/2017-11-28/openapi.json
+    - name: aws-inspector
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/inspector/2016-02-16/openapi.json
+    - name: aws-macie2
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/macie2/2020-01-01/openapi.json
+    - name: aws-securityhub
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/securityhub/2018-10-26/openapi.json
+    - name: aws-waf
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/waf/2015-08-24/openapi.json
+    - name: aws-wafv2
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/wafv2/2019-07-29/openapi.json
+    - name: patrowl
+      type: openapi
+      source: https://api.apis.guru/v2/specs/patrowl.local/1.0.0/openapi.json
+    - name: probely
+      type: openapi
+      source: https://api.apis.guru/v2/specs/probely.com/1.2.0/openapi.json
+    - name: azure-security-insights
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/securityinsights-SecurityInsights/2020-01-01/swagger.json
   gaming:
     - name: pokeapi
       type: graphql
@@ -1783,6 +2378,15 @@ clients:
     - name: pandascore
       type: openapi
       source: https://api.apis.guru/v2/specs/pandascore.co/2.23.1/openapi.json
+    - name: dodo-ac
+      type: openapi
+      source: https://api.apis.guru/v2/specs/dodo.ac/1.5.0/openapi.json
+    - name: gamesparks-details
+      type: openapi
+      source: https://api.apis.guru/v2/specs/gamesparks.net/game-details/v2/openapi.json
+    - name: pokeapi-github
+      type: openapi
+      source: https://raw.githubusercontent.com/PokeAPI/pokeapi/master/openapi.yml
   healthcare:
     - name: google-healthcare
       type: openapi
@@ -1850,6 +2454,18 @@ clients:
     - name: google-lifesciences
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/lifesciences/v2beta/openapi.json
+    - name: drchrono
+      type: openapi
+      source: https://api.apis.guru/v2/specs/drchrono.com/v4%20%28Hunt%20Valley%29/openapi.json
+    - name: apisetu-aiimsmangalagiri
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apisetu.gov.in/aiimsmangalagiri/3.0.0/openapi.json
+    - name: apisetu-aiimspatna
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apisetu.gov.in/aiimspatna/3.0.0/openapi.json
+    - name: apisetu-aiimsrishikesh
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apisetu.gov.in/aiimsrishikesh/3.0.0/openapi.json
 
   identity:
     - name: onepassword-connect
@@ -2002,6 +2618,42 @@ clients:
     - name: google-websecurityscanner
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/websecurityscanner/v1beta/openapi.json
+    - name: aws-secretsmanager
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/secretsmanager/2017-10-17/openapi.json
+    - name: aws-ssm
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/ssm/2014-11-06/openapi.json
+    - name: google-firebase-app-check
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/firebaseappcheck/v1/openapi.json
+    - name: citrixonline-scim
+      type: openapi
+      source: https://api.apis.guru/v2/specs/citrixonline.com/scim/NA/swagger.json
+    - name: digitallocker-authpartner
+      type: openapi
+      source: https://api.apis.guru/v2/specs/digitallocker.gov.in/authpartner/1.0.0/openapi.json
+    - name: idtbeyond
+      type: openapi
+      source: https://api.apis.guru/v2/specs/idtbeyond.com/1.1.7/swagger.json
+    - name: npr-identity
+      type: openapi
+      source: https://api.apis.guru/v2/specs/npr.org/identity/2/swagger.json
+    - name: passwordutility
+      type: openapi
+      source: https://api.apis.guru/v2/specs/passwordutility.net/v1/swagger.json
+    - name: personio-authentication
+      type: openapi
+      source: https://api.apis.guru/v2/specs/personio.de/authentication/1.0/openapi.json
+    - name: tokenjay
+      type: openapi
+      source: https://api.apis.guru/v2/specs/tokenjay.app/1.0.0/openapi.json
+    - name: google-kmsinventory
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/kmsinventory/v1/openapi.json
+    - name: google-play-integrity
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/playintegrity/v1/openapi.json
 
   incident:
     - name: pagerduty
@@ -2040,6 +2692,12 @@ clients:
     - name: victorops-apisguru
       type: openapi
       source: https://api.apis.guru/v2/specs/victorops.com/0.0.3/swagger.json
+    - name: aws-ssm-contacts
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/ssm-contacts/2021-05-03/openapi.json
+    - name: aws-ssm-incidents
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/ssm-incidents/2018-05-10/openapi.json
 
   iot:
     - name: aws-greengrass
@@ -2153,6 +2811,39 @@ clients:
     - name: google-smartdevicemanagement
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/smartdevicemanagement/v1/openapi.json
+    - name: clarify
+      type: openapi
+      source: https://api.apis.guru/v2/specs/clarify.io/1.3.7/swagger.json
+    - name: edrv
+      type: openapi
+      source: https://api.apis.guru/v2/specs/edrv.io/v1/openapi.json
+    - name: gambitcomm-mimic
+      type: openapi
+      source: https://api.apis.guru/v2/specs/gambitcomm.local/mimic/21.00/openapi.json
+    - name: hillbillysoftware-shinobi
+      type: openapi
+      source: https://api.apis.guru/v2/specs/hillbillysoftware.com/shinobi/v1/swagger.json
+    - name: intel-product-catalogue
+      type: openapi
+      source: https://api.apis.guru/v2/specs/intel.com/product-catalogue/0.1.0/swagger.json
+    - name: intellifi
+      type: openapi
+      source: https://api.apis.guru/v2/specs/intellifi.nl/2.23.2+0.gfbc3926.dirty/openapi.json
+    - name: mbus
+      type: openapi
+      source: https://api.apis.guru/v2/specs/mbus.local/0.3.5/openapi.json
+    - name: meraki-apisguru
+      type: openapi
+      source: https://api.apis.guru/v2/specs/meraki.com/0.0.0-streaming/openapi.json
+    - name: netboxdemo
+      type: openapi
+      source: https://api.apis.guru/v2/specs/netboxdemo.com/2.8/openapi.json
+    - name: telematicssdk
+      type: openapi
+      source: https://api.apis.guru/v2/specs/telematicssdk.com/1.0.0/openapi.json
+    - name: waterlinked
+      type: openapi
+      source: https://api.apis.guru/v2/specs/waterlinked.com/1.0.0/swagger.json
 
   issue-tracking:
     - name: jira
@@ -2195,6 +2886,12 @@ clients:
     - name: jira-atlassian
       type: openapi
       source: https://api.apis.guru/v2/specs/atlassian.com/jira/1001.0.0-SNAPSHOT/openapi.json
+    - name: jirafe-apisguru
+      type: openapi
+      source: https://api.apis.guru/v2/specs/jirafe.com/2.0.0/swagger.json
+    - name: lgtm
+      type: openapi
+      source: https://api.apis.guru/v2/specs/lgtm.com/v1.0/openapi.json
   maps:
     - name: opencagedata
       type: openapi
@@ -2292,6 +2989,27 @@ clients:
     - name: google-vectortile
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/vectortile/v1/openapi.json
+    - name: geode-systems
+      type: openapi
+      source: https://api.apis.guru/v2/specs/geodesystems.com/1.0.0/openapi.json
+    - name: google-playable-locations
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/playablelocations/v3/openapi.json
+    - name: interzoid-zipinfo
+      type: openapi
+      source: https://api.apis.guru/v2/specs/interzoid.com/getzipinfo/1.0.0/openapi.json
+    - name: interzoid-getareacode
+      type: openapi
+      source: https://api.apis.guru/v2/specs/interzoid.com/getareacodefromnumber/1.0.0/openapi.json
+    - name: lotadata
+      type: openapi
+      source: https://api.apis.guru/v2/specs/lotadata.com/2.0.0/swagger.json
+    - name: miataru
+      type: openapi
+      source: https://api.apis.guru/v2/specs/miataru.com/1.0.0/swagger.json
+    - name: rapidapi-idealspot
+      type: openapi
+      source: https://api.apis.guru/v2/specs/rapidapi.com/idealspot-geodata/1.0/openapi.json
 
   marketing:
     - name: braze
@@ -2400,6 +3118,12 @@ clients:
     - name: google-mybusiness-lodging
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/mybusinesslodging/v1/openapi.json
+    - name: koomalooma
+      type: openapi
+      source: https://api.apis.guru/v2/specs/koomalooma.com/1.0/swagger.json
+    - name: redeal-analytics
+      type: openapi
+      source: https://api.apis.guru/v2/specs/redeal.io/analytics/1.0.0/openapi.json
   monitoring:
     - name: grafana
       type: openapi
@@ -2477,6 +3201,24 @@ clients:
     - name: google-cloudprofiler
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/cloudprofiler/v2/openapi.json
+    - name: aws-cloudtrail
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/cloudtrail/2013-11-01/openapi.json
+    - name: aws-xray
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/xray/2016-04-12/openapi.json
+    - name: azure-advisor
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/advisor/2017-04-19/swagger.json
+    - name: azure-alerts-management
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/alertsmanagement-AlertsManagement/2019-05-05-preview/swagger.json
+    - name: truesight
+      type: openapi
+      source: https://api.apis.guru/v2/specs/truesight.local/11.1.00/openapi.json
+    - name: vmware-vrni
+      type: openapi
+      source: https://api.apis.guru/v2/specs/vmware.local/vrni/1.0.0/openapi.json
 
   music:
     - name: spotify
@@ -2545,6 +3287,12 @@ clients:
     - name: apple-sirikit-cloud-media
       type: openapi
       source: https://api.apis.guru/v2/specs/apple.com/sirikit-cloud-media/1.0.2/openapi.json
+    - name: jellyfin-apisguru
+      type: openapi
+      source: https://api.apis.guru/v2/specs/jellyfin.local/v1/openapi.json
+    - name: spotify-sonallux
+      type: openapi
+      source: https://api.apis.guru/v2/specs/spotify.com/sonallux/2023.2.27/openapi.json
 
   news:
     - name: nytimes-top-stories
@@ -2628,6 +3376,12 @@ clients:
     - name: npr-sponsorship
       type: openapi
       source: https://api.apis.guru/v2/specs/npr.org/sponsorship/2/swagger.json
+    - name: bbc
+      type: openapi
+      source: https://api.apis.guru/v2/specs/bbc.com/1.0.0/openapi.json
+    - name: nytimes-geo
+      type: openapi
+      source: https://api.apis.guru/v2/specs/nytimes.com/geo_api/1.0.0/openapi.json
 
   payments:
     - name: stripe
@@ -2712,6 +3466,48 @@ clients:
     - name: pay1-link
       type: openapi
       source: https://api.apis.guru/v2/specs/pay1.de/link/v1/openapi.json
+    - name: adyen-account-service
+      type: openapi
+      source: https://api.apis.guru/v2/specs/adyen.com/AccountService/6/openapi.json
+    - name: adyen-balance-control
+      type: openapi
+      source: https://api.apis.guru/v2/specs/adyen.com/BalanceControlService/1/openapi.json
+    - name: adyen-balance-platform
+      type: openapi
+      source: https://api.apis.guru/v2/specs/adyen.com/BalancePlatformService/2/openapi.json
+    - name: adyen-data-protection
+      type: openapi
+      source: https://api.apis.guru/v2/specs/adyen.com/DataProtectionService/1/openapi.json
+    - name: adyen-fund-service
+      type: openapi
+      source: https://api.apis.guru/v2/specs/adyen.com/FundService/6/openapi.json
+    - name: adyen-hop
+      type: openapi
+      source: https://api.apis.guru/v2/specs/adyen.com/HopService/6/openapi.json
+    - name: adyen-legal-entity
+      type: openapi
+      source: https://api.apis.guru/v2/specs/adyen.com/LegalEntityService/3/openapi.json
+    - name: adyen-notification-config
+      type: openapi
+      source: https://api.apis.guru/v2/specs/adyen.com/NotificationConfigurationService/6/openapi.json
+    - name: adyen-payment-service
+      type: openapi
+      source: https://api.apis.guru/v2/specs/adyen.com/PaymentService/68/openapi.json
+    - name: adyen-payout
+      type: openapi
+      source: https://api.apis.guru/v2/specs/adyen.com/PayoutService/68/openapi.json
+    - name: adyen-stored-value
+      type: openapi
+      source: https://api.apis.guru/v2/specs/adyen.com/StoredValueService/46/openapi.json
+    - name: adyen-test-card
+      type: openapi
+      source: https://api.apis.guru/v2/specs/adyen.com/TestCardService/1/openapi.json
+    - name: adyen-tfm
+      type: openapi
+      source: https://api.apis.guru/v2/specs/adyen.com/TfmAPIService/1/openapi.json
+    - name: adyen-transfer
+      type: openapi
+      source: https://api.apis.guru/v2/specs/adyen.com/TransferService/3/openapi.json
 
   project-mgmt:
     - name: miro
@@ -2771,6 +3567,36 @@ clients:
     - name: trello-apisguru
       type: openapi
       source: https://api.apis.guru/v2/specs/trello.com/1.0/openapi.json
+    - name: apacta
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apacta.com/0.0.42/openapi.json
+    - name: etherpad
+      type: openapi
+      source: https://api.apis.guru/v2/specs/etherpad.local/1.2.15/openapi.json
+    - name: letmc-basic
+      type: openapi
+      source: https://api.apis.guru/v2/specs/letmc.com/basic-tier/v2-basic-tier/swagger.json
+    - name: letmc-customer
+      type: openapi
+      source: https://api.apis.guru/v2/specs/letmc.com/customer/v2-customer/openapi.json
+    - name: letmc-diary
+      type: openapi
+      source: https://api.apis.guru/v2/specs/letmc.com/diary/v3-diary/openapi.json
+    - name: letmc-maintenance
+      type: openapi
+      source: https://api.apis.guru/v2/specs/letmc.com/maintenance/v3-maintenance/openapi.json
+    - name: letmc-reporting
+      type: openapi
+      source: https://api.apis.guru/v2/specs/letmc.com/reporting/v3-reporting/swagger.json
+    - name: noosh
+      type: openapi
+      source: https://api.apis.guru/v2/specs/noosh.com/1.0/openapi.json
+    - name: pims
+      type: openapi
+      source: https://api.apis.guru/v2/specs/pims.io/1.0/swagger.json
+    - name: asana-github
+      type: openapi
+      source: https://raw.githubusercontent.com/asana/openapi/master/defs/asana_oas.yaml
 
   public-data:
     - name: countries
@@ -3416,6 +4242,171 @@ clients:
     - name: appcenter-ms
       type: openapi
       source: https://api.apis.guru/v2/specs/appcenter.ms/v0.1/openapi.json
+    - name: amentum-aviation-radiation
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amentum.space/aviation_radiation/1.5.0/openapi.json
+    - name: amentum-global-magnet
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amentum.space/global-magnet/1.3.0/openapi.json
+    - name: deutschebahn-reisezentren
+      type: openapi
+      source: https://api.apis.guru/v2/specs/deutschebahn.com/reisezentren/v1/openapi.json
+    - name: bclaws
+      type: openapi
+      source: https://api.apis.guru/v2/specs/bclaws.ca/bclaws/1.0.0/openapi.json
+    - name: bridgedb
+      type: openapi
+      source: https://api.apis.guru/v2/specs/bridgedb.org/0.9.0/swagger.json
+    - name: britbox
+      type: openapi
+      source: https://api.apis.guru/v2/specs/britbox.co.uk/3.730.300-ref-1-39-0/openapi.json
+    - name: carbondoomsday
+      type: openapi
+      source: https://api.apis.guru/v2/specs/carbondoomsday.com/v1/swagger.json
+    - name: digitalnz-apisguru
+      type: openapi
+      source: https://api.apis.guru/v2/specs/digitalnz.org/3/openapi.json
+    - name: fecru
+      type: openapi
+      source: https://api.apis.guru/v2/specs/fecru.local/1.0.0/swagger.json
+    - name: inpe-dados-abertos
+      type: openapi
+      source: https://api.apis.guru/v2/specs/inpe.br/dados-abertos/1.0/swagger.json
+    - name: interzoid-citystandard
+      type: openapi
+      source: https://api.apis.guru/v2/specs/interzoid.com/getcitystandard/1.0.0/openapi.json
+    - name: interzoid-companymatch
+      type: openapi
+      source: https://api.apis.guru/v2/specs/interzoid.com/getcompanymatch/1.0.0/openapi.json
+    - name: interzoid-countrystandard
+      type: openapi
+      source: https://api.apis.guru/v2/specs/interzoid.com/getcountrystandard/1.0.0/openapi.json
+    - name: interzoid-getfullnameparsed
+      type: openapi
+      source: https://api.apis.guru/v2/specs/interzoid.com/getfullnameparsedmatch/1.0.0/openapi.json
+    - name: interzoid-getstateabbr
+      type: openapi
+      source: https://api.apis.guru/v2/specs/interzoid.com/getstateabbreviation/1.0.0/openapi.json
+    - name: interzoid-globalpageload
+      type: openapi
+      source: https://api.apis.guru/v2/specs/interzoid.com/globalpageload/1.0.0/openapi.json
+    - name: interzoid-lookupareacode
+      type: openapi
+      source: https://api.apis.guru/v2/specs/interzoid.com/lookupareacode/1.0.0/openapi.json
+    - name: iqualify
+      type: openapi
+      source: https://api.apis.guru/v2/specs/iqualify.com/v1/openapi.json
+    - name: javatpoint
+      type: openapi
+      source: https://api.apis.guru/v2/specs/javatpoint.com/v1/openapi.json
+    - name: landregistry-deed
+      type: openapi
+      source: https://api.apis.guru/v2/specs/landregistry.gov.uk/deed/1.0.0/swagger.json
+    - name: link-fish
+      type: openapi
+      source: https://api.apis.guru/v2/specs/link.fish/2018-07-05/swagger.json
+    - name: lumminary
+      type: openapi
+      source: https://api.apis.guru/v2/specs/lumminary.com/1.0/swagger.json
+    - name: math-tools
+      type: openapi
+      source: https://api.apis.guru/v2/specs/math.tools/1.5/openapi.json
+    - name: mercedes-configurator
+      type: openapi
+      source: https://api.apis.guru/v2/specs/mercedes-benz.com/configurator/1.0/swagger.json
+    - name: mercedes-dealer
+      type: openapi
+      source: https://api.apis.guru/v2/specs/mercedes-benz.com/dealer/1.0/swagger.json
+    - name: mercedes-diagnostics
+      type: openapi
+      source: https://api.apis.guru/v2/specs/mercedes-benz.com/diagnostics/1.0/swagger.json
+    - name: mercedes-image
+      type: openapi
+      source: https://api.apis.guru/v2/specs/mercedes-benz.com/image/1.0/swagger.json
+    - name: mtaa
+      type: openapi
+      source: https://api.apis.guru/v2/specs/mtaa-api.herokuapp.com/1.0/openapi.json
+    - name: neutrinoapi
+      type: openapi
+      source: https://api.apis.guru/v2/specs/neutrinoapi.net/3.6.3/openapi.json
+    - name: openaq-apisguru
+      type: openapi
+      source: https://api.apis.guru/v2/specs/openaq.local/2.0.0/openapi.json
+    - name: optimade
+      type: openapi
+      source: https://api.apis.guru/v2/specs/optimade.local/1.1.0~develop/openapi.json
+    - name: parliament-commonsvotes
+      type: openapi
+      source: https://api.apis.guru/v2/specs/parliament.uk/commonsvotes/v1/swagger.json
+    - name: parliament-lordsvotes
+      type: openapi
+      source: https://api.apis.guru/v2/specs/parliament.uk/lordsvotes/v1/openapi.json
+    - name: parliament-oralquestions
+      type: openapi
+      source: https://api.apis.guru/v2/specs/parliament.uk/oralquestions/v1/openapi.json
+    - name: parliament-statutoryinstruments
+      type: openapi
+      source: https://api.apis.guru/v2/specs/parliament.uk/statutoryinstruments/v1/openapi.json
+    - name: parliament-writtenquestions
+      type: openapi
+      source: https://api.apis.guru/v2/specs/parliament.uk/writtenquestions/v1/openapi.json
+    - name: quarantine-country
+      type: openapi
+      source: https://api.apis.guru/v2/specs/quarantine.country/1.0/swagger.json
+    - name: quicksold-location
+      type: openapi
+      source: https://api.apis.guru/v2/specs/quicksold.co.uk/location/1.0/swagger.json
+    - name: schooldigger-apisguru
+      type: openapi
+      source: https://api.apis.guru/v2/specs/schooldigger.com/v1/swagger.json
+    - name: sheetlabs-vedic-society
+      type: openapi
+      source: https://api.apis.guru/v2/specs/sheetlabs.com/vedic-society/1.2/swagger.json
+    - name: thenounproject
+      type: openapi
+      source: https://api.apis.guru/v2/specs/thenounproject.com/1.0.0/swagger.json
+    - name: tinyuid
+      type: openapi
+      source: https://api.apis.guru/v2/specs/tinyuid.com/1.0.0/swagger.json
+    - name: uscann
+      type: openapi
+      source: https://api.apis.guru/v2/specs/uscann.net/1.0/swagger.json
+    - name: wmata-bus-realtime
+      type: openapi
+      source: https://api.apis.guru/v2/specs/wmata.com/bus-realtime/1.0/swagger.json
+    - name: zappiti
+      type: openapi
+      source: https://api.apis.guru/v2/specs/zappiti.com/4.15.174/swagger.json
+    - name: apisetu-acko
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apisetu.gov.in/acko/3.0.0/openapi.json
+    - name: apisetu-bajajallianz
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apisetu.gov.in/bajajallianz/3.0.0/openapi.json
+    - name: apisetu-bharatpetroleum
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apisetu.gov.in/bharatpetroleum/3.0.0/openapi.json
+    - name: apisetu-bhavishya
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apisetu.gov.in/bhavishya/3.0.0/openapi.json
+    - name: apisetu-cbse
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apisetu.gov.in/cbse/3.0.0/openapi.json
+    - name: apisetu-chitkarauniversity
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apisetu.gov.in/chitkarauniversity/3.0.0/openapi.json
+    - name: apisetu-cisce
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apisetu.gov.in/cisce/3.0.0/openapi.json
+    - name: apisetu-csc
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apisetu.gov.in/csc/3.0.0/openapi.json
+    - name: apisetu-dgft
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apisetu.gov.in/dgft/3.0.0/openapi.json
+    - name: apisetu-epfindia
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apisetu.gov.in/epfindia/3.0.0/openapi.json
 
   sandbox:
     - name: petstore
@@ -3487,6 +4478,9 @@ clients:
     - name: who-hosts-this
       type: openapi
       source: https://api.apis.guru/v2/specs/who-hosts-this.com/0.0.1/swagger.json
+    - name: restful4up
+      type: openapi
+      source: https://api.apis.guru/v2/specs/restful4up.local/1.0.0/openapi.json
 
   sci-fi:
     - name: swapi
@@ -3571,6 +4565,9 @@ clients:
     - name: thebluealliance
       type: openapi
       source: https://api.apis.guru/v2/specs/thebluealliance.com/3.8.2/openapi.json
+    - name: tcgdex
+      type: openapi
+      source: https://api.apis.guru/v2/specs/tcgdex.net/2.0.0/openapi.json
   search:
     - name: typesense
       type: openapi
@@ -3650,6 +4647,45 @@ clients:
     - name: ms-bing-spellcheck
       type: openapi
       source: https://api.apis.guru/v2/specs/microsoft.com/cognitiveservices-SpellCheck/1.0/swagger.json
+    - name: aws-cloudsearch
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/cloudsearch/2013-01-01/openapi.json
+    - name: aws-cloudsearchdomain
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/cloudsearchdomain/2013-01-01/openapi.json
+    - name: aws-kendra
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/kendra/2019-02-03/openapi.json
+    - name: azure-search
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/search/2015-08-19/swagger.json
+    - name: azure-search-index
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/search-searchindex/2019-05-06-Preview/swagger.json
+    - name: azure-search-service
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/search-searchservice/2019-05-06-Preview/swagger.json
+    - name: importio-data
+      type: openapi
+      source: https://api.apis.guru/v2/specs/import.io/data/1.0/swagger.json
+    - name: importio-rss
+      type: openapi
+      source: https://api.apis.guru/v2/specs/import.io/rss/1.0/swagger.json
+    - name: importio-run
+      type: openapi
+      source: https://api.apis.guru/v2/specs/import.io/run/1.0/swagger.json
+    - name: importio-schedule
+      type: openapi
+      source: https://api.apis.guru/v2/specs/import.io/schedule/1.0/swagger.json
+    - name: ms-bing-customimagesearch
+      type: openapi
+      source: https://api.apis.guru/v2/specs/microsoft.com/cognitiveservices-CustomImageSearch/1.0/swagger.json
+    - name: ms-bing-customsearch
+      type: openapi
+      source: https://api.apis.guru/v2/specs/microsoft.com/cognitiveservices-CustomSearch/1.0/swagger.json
+    - name: ms-bing-entitysearch
+      type: openapi
+      source: https://api.apis.guru/v2/specs/microsoft.com/cognitiveservices-EntitySearch/1.0/swagger.json
 
   shipping:
     - name: ebay-logistics
@@ -3855,6 +4891,9 @@ clients:
     - name: google-blogger
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/blogger/v3/openapi.json
+    - name: discourse-apisguru
+      type: openapi
+      source: https://api.apis.guru/v2/specs/discourse.local/latest/openapi.json
 
   storage:
     - name: box
@@ -3914,6 +4953,21 @@ clients:
     - name: google-driveactivity
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/driveactivity/v2/openapi.json
+    - name: aws-s3-control
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/s3control/2018-08-20/openapi.json
+    - name: google-storagetransfer
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/storagetransfer/v1/openapi.json
+    - name: aws-workdocs
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/workdocs/2016-05-01/openapi.json
+    - name: google-firebase-storage
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/firebasestorage/v1beta/openapi.json
+    - name: apideck-file-storage
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apideck.com/file-storage/9.3.0/openapi.json
 
   tax:
     - name: billingo
@@ -4209,6 +5263,18 @@ clients:
     - name: vonage-application-v2
       type: openapi
       source: https://api.apis.guru/v2/specs/nexmo.com/application.v2/2.1.4/openapi.json
+    - name: surevoip
+      type: openapi
+      source: https://api.apis.guru/v2/specs/surevoip.co.uk/9dcb0dc8/openapi.json
+    - name: telnyx-apisguru
+      type: openapi
+      source: https://api.apis.guru/v2/specs/telnyx.com/2.0.0/openapi.json
+    - name: vonage-vgis
+      type: openapi
+      source: https://api.apis.guru/v2/specs/vonage.com/vgis/1.0.1/openapi.json
+    - name: twilio-messaging-v1-github
+      type: openapi
+      source: https://raw.githubusercontent.com/twilio/twilio-oai/main/spec/json/twilio_messaging_v1.json
 
   testing:
     - name: browserless
@@ -4298,6 +5364,33 @@ clients:
     - name: clickmeter
       type: openapi
       source: https://api.apis.guru/v2/specs/clickmeter.com/v2/openapi.json
+    - name: aws-fis
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/fis/2020-12-01/openapi.json
+    - name: browshot
+      type: openapi
+      source: https://api.apis.guru/v2/specs/browshot.com/1.17.0/swagger.json
+    - name: linqr
+      type: openapi
+      source: https://api.apis.guru/v2/specs/linqr.app/2.0/openapi.json
+    - name: moonmoonmoonmoon
+      type: openapi
+      source: https://api.apis.guru/v2/specs/moonmoonmoonmoon.com/1.0/swagger.json
+    - name: peoplegeneratorapi
+      type: openapi
+      source: https://api.apis.guru/v2/specs/peoplegeneratorapi.live/v0/openapi.json
+    - name: ritc
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ritc.io/1.0.0/swagger.json
+    - name: stellastra
+      type: openapi
+      source: https://api.apis.guru/v2/specs/stellastra.com/1.0/openapi.json
+    - name: testfire-altoroj
+      type: openapi
+      source: https://api.apis.guru/v2/specs/testfire.net/altoroj/1.0.2/swagger.json
+    - name: google-toolresults
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/toolresults/v1beta3/openapi.json
 
   translation:
     - name: deepl
@@ -4357,6 +5450,12 @@ clients:
     - name: datumbox
       type: openapi
       source: https://api.apis.guru/v2/specs/datumbox.com/1.0/openapi.json
+    - name: motaword
+      type: openapi
+      source: https://api.apis.guru/v2/specs/motaword.com/1.0/openapi.json
+    - name: tafqit
+      type: openapi
+      source: https://api.apis.guru/v2/specs/tafqit.herokuapp.com/v1/openapi.json
 
   vector-database:
     - name: pinecone
@@ -4539,6 +5638,12 @@ clients:
     - name: google-transcoder
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/transcoder/v1/openapi.json
+    - name: aws-mediaconnect
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/mediaconnect/2018-11-14/openapi.json
+    - name: json2video
+      type: openapi
+      source: https://api.apis.guru/v2/specs/json2video.com/2.0.0/openapi.json
   arr:
     - name: qbittorrent
       type: openapi
@@ -4602,6 +5707,12 @@ clients:
     - name: stormglass
       type: openapi
       source: https://api.apis.guru/v2/specs/stormglass.io/1.0.1/swagger.json
+    - name: interzoid-weathercity
+      type: openapi
+      source: https://api.apis.guru/v2/specs/interzoid.com/getweathercity/1.0.0/openapi.json
+    - name: rapidapi-ecowetter
+      type: openapi
+      source: https://api.apis.guru/v2/specs/rapidapi.com/ecowetter/1.0.0/openapi.json
 
   automation:
     - name: svix
@@ -4616,6 +5727,9 @@ clients:
     - name: zapier-nla
       type: openapi
       source: https://api.apis.guru/v2/specs/zapier.com/nla/1.0.0/openapi.json
+    - name: svix-apisguru
+      type: openapi
+      source: https://api.apis.guru/v2/specs/svix.com/1.4/openapi.json
   food:
     - name: spoonacular
       type: openapi
@@ -4629,6 +5743,15 @@ clients:
     - name: openfoodfacts-v3
       type: openapi
       source: https://raw.githubusercontent.com/openfoodfacts/openfoodfacts-server/main/docs/api/ref/api-v3.yaml
+    - name: bigoven
+      type: openapi
+      source: https://api.apis.guru/v2/specs/bigoven.com/partner/openapi.json
+    - name: calorieninjas
+      type: openapi
+      source: https://api.apis.guru/v2/specs/calorieninjas.com/1.0.0/openapi.json
+    - name: just-eat
+      type: openapi
+      source: https://api.apis.guru/v2/specs/just-eat.co.uk/1.0.0/openapi.json
   sports:
     - name: balldontlie
       type: openapi
@@ -4672,6 +5795,9 @@ clients:
     - name: fitbit
       type: openapi
       source: https://raw.githubusercontent.com/allenporter/fitbit-web-api/main/openapi/fitbit-web-api-openapi.json
+    - name: whapi-sportsdata
+      type: openapi
+      source: https://api.apis.guru/v2/specs/whapi.com/sportsdata/2/swagger.json
   travel:
     - name: amadeus
       type: openapi
@@ -4715,6 +5841,79 @@ clients:
     - name: flightaware-aeroapi
       type: openapi
       source: https://www.flightaware.com/commercial/aeroapi/resources/aeroapi-openapi.yml
+    - name: amadeus-airport-nearest
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amadeus.com/amadeus-airport-nearest-relevant/1.1.2/swagger.json
+    - name: amadeus-airport-on-time
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amadeus.com/amadeus-airport-on-time-performance/1.0.4/swagger.json
+    - name: amadeus-branded-fares-upsell
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amadeus.com/amadeus-branded-fares-upsell/1.0.1/swagger.json
+    - name: amadeus-flight-availabilities-search
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amadeus.com/amadeus-flight-availabilities-search/1.0.2/swagger.json
+    - name: amadeus-flight-busiest-period
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amadeus.com/amadeus-flight-busiest-traveling-period/1.0.2/swagger.json
+    - name: amadeus-flight-check-in-links
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amadeus.com/amadeus-flight-check-in-links/2.1.2/swagger.json
+    - name: amadeus-flight-choice-prediction
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amadeus.com/amadeus-flight-choice-prediction/2.0.2/swagger.json
+    - name: amadeus-flight-create-orders
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amadeus.com/amadeus-flight-create-orders/1.9.0/swagger.json
+    - name: amadeus-flight-most-booked
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amadeus.com/amadeus-flight-most-booked-destinations/1.1.1/swagger.json
+    - name: amadeus-flight-most-traveled
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amadeus.com/amadeus-flight-most-traveled-destinations/1.1.1/swagger.json
+    - name: amadeus-flight-offers-price
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amadeus.com/amadeus-flight-offers-price/1.2.2/swagger.json
+    - name: amadeus-flight-order-management
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amadeus.com/amadeus-flight-order-management/1.9.0/swagger.json
+    - name: amadeus-flight-price-analysis
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amadeus.com/amadeus-flight-price-analysis/1.0.1/openapi.json
+    - name: amadeus-hotel-booking
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amadeus.com/amadeus-hotel-booking/1.1.3/swagger.json
+    - name: amadeus-hotel-name-autocomplete
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amadeus.com/amadeus-hotel-name-autocomplete/1.0.3/swagger.json
+    - name: amadeus-location-score
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amadeus.com/amadeus-location-score/1.0.2/openapi.json
+    - name: amadeus-safe-place
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amadeus.com/amadeus-safe-place-/1.0.0/swagger.json
+    - name: amadeus-seatmap-display
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amadeus.com/amadeus-seatmap-display/1.9.2/swagger.json
+    - name: amadeus-travel-recommendations
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amadeus.com/amadeus-travel-recommendations/1.0.3/openapi.json
+    - name: lyft
+      type: openapi
+      source: https://api.apis.guru/v2/specs/lyft.com/1.0.0/swagger.json
+    - name: lufthansa-partner
+      type: openapi
+      source: https://api.apis.guru/v2/specs/lufthansa.com/partner/1.0/openapi.json
+    - name: lufthansa-public
+      type: openapi
+      source: https://api.apis.guru/v2/specs/lufthansa.com/public/1.0/openapi.json
+    - name: mon-voyage-pas-cher
+      type: openapi
+      source: https://api.apis.guru/v2/specs/mon-voyage-pas-cher.com/0.0.1/swagger.json
+    - name: oceandrivers
+      type: openapi
+      source: https://api.apis.guru/v2/specs/oceandrivers.com/1.0/openapi.json
+
   events:
     - name: ticketmaster-discovery
       type: openapi

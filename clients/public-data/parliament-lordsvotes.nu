@@ -1,0 +1,252 @@
+# Auto-generated client for Lords Votes API vv1
+# Source: https://api.apis.guru/v2/specs/parliament.uk/lordsvotes/v1/openapi.json
+# Auth: --token flag or $env.LORDS_VOTES_API_TOKEN
+
+const BASE_URL = "http://localhost"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o LORDS_VOTES_API_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["http://localhost"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+# Completers for enum parameters
+def TotalVotesCastComparator-completer [] { ["EqualTo" "GreaterThan" "GreaterThanOrEqualTo" "LessThan" "LessThanOrEqualTo"] }
+def MajorityComparator-completer [] { ["EqualTo" "GreaterThan" "GreaterThanOrEqualTo" "LessThan" "LessThanOrEqualTo"] }
+def accept-completer [] { ["application/json" "text/json" "text/plain"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-divisions-groupedbyparty get" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Return Divisions results grouped by party
+#
+# GET /data/Divisions/groupedbyparty
+export def "data-divisions-groupedbyparty get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --SearchTerm: string # Divisions containing search term within title or number (nullable)
+  --MemberId: int # Divisions returning Member with Member ID voting records (nullable, format: int32)
+  --IncludeWhenMemberWasTeller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted (nullable)
+  --StartDate: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
+  --EndDate: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
+  --DivisionNumber: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (nullable, format: int32)
+  --TotalVotesCastComparator: string@TotalVotesCastComparator-completer # comparison operator to use
+  --TotalVotesCastValueToCompare: int # value to compare to with the operator provided (format: int32)
+  --MajorityComparator: string@MajorityComparator-completer # comparison operator to use
+  --MajorityValueToCompare: int # value to compare to with the operator provided (format: int32)
+]: nothing -> record<content: table<partyName: string, voteCount: int>, contentCount: int, date: string, divisionId: int, notContent: table<partyName: string, voteCount: int>, notContentCount: int, number: int, title: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "SearchTerm" $SearchTerm "scalar") (serialize-qp "MemberId" $MemberId "scalar") (serialize-qp "IncludeWhenMemberWasTeller" $IncludeWhenMemberWasTeller "scalar") (serialize-qp "StartDate" $StartDate "scalar") (serialize-qp "EndDate" $EndDate "scalar") (serialize-qp "DivisionNumber" $DivisionNumber "scalar") (serialize-qp "TotalVotesCast.Comparator" $TotalVotesCastComparator "scalar") (serialize-qp "TotalVotesCast.ValueToCompare" $TotalVotesCastValueToCompare "scalar") (serialize-qp "Majority.Comparator" $MajorityComparator "scalar") (serialize-qp "Majority.ValueToCompare" $MajorityValueToCompare "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/data/Divisions/groupedbyparty" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Return voting records for a Member
+#
+# GET /data/Divisions/membervoting
+export def "data-divisions-membervoting get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --MemberId: int # Id number of a Member whose voting records are to be returned (format: int32)
+  --SearchTerm: string # Divisions containing search term within title or number (nullable)
+  --IncludeWhenMemberWasTeller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted (nullable)
+  --StartDate: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
+  --EndDate: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
+  --DivisionNumber: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (nullable, format: int32)
+  --TotalVotesCastComparator: string@TotalVotesCastComparator-completer # comparison operator to use
+  --TotalVotesCastValueToCompare: int # value to compare to with the operator provided (format: int32)
+  --MajorityComparator: string@MajorityComparator-completer # comparison operator to use
+  --MajorityValueToCompare: int # value to compare to with the operator provided (format: int32)
+  --skip: int # The number of records to skip. Must be a positive integer. Default is 0 (format: int32, default: 0)
+  --take: int # The number of records to return per page. Must be more than 0. Default is 25 (format: int32, default: 25)
+]: nothing -> record<memberId: int, memberWasContent: bool, memberWasTeller: bool, publishedDivision: record<amendmentMotionNotes: string, authoritativeContentCount: int, authoritativeNotContentCount: int, contentTellers: list<record>, contents: list<record>, date: string, divisionHadTellers: bool, divisionId: int, divisionWasExclusivelyRemote: bool, isGovernmentContent: bool, isGovernmentWin: bool, isHouse: bool, isWhipped: bool, memberContentCount: int, memberNotContentCount: int, notContentTellers: list<record>, notContents: list<record>, notes: string, number: int, remoteVotingEnd: string, remoteVotingStart: string, sponsoringMemberId: int, tellerContentCount: int, tellerNotContentCount: int, title: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "MemberId" $MemberId "scalar") (serialize-qp "SearchTerm" $SearchTerm "scalar") (serialize-qp "IncludeWhenMemberWasTeller" $IncludeWhenMemberWasTeller "scalar") (serialize-qp "StartDate" $StartDate "scalar") (serialize-qp "EndDate" $EndDate "scalar") (serialize-qp "DivisionNumber" $DivisionNumber "scalar") (serialize-qp "TotalVotesCast.Comparator" $TotalVotesCastComparator "scalar") (serialize-qp "TotalVotesCast.ValueToCompare" $TotalVotesCastValueToCompare "scalar") (serialize-qp "Majority.Comparator" $MajorityComparator "scalar") (serialize-qp "Majority.ValueToCompare" $MajorityValueToCompare "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/data/Divisions/membervoting" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Return a list of Divisions
+#
+# GET /data/Divisions/search
+export def "data-divisions-search get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --SearchTerm: string # Divisions containing search term within title or number (nullable)
+  --MemberId: int # Divisions returning Member with Member ID voting records (nullable, format: int32)
+  --IncludeWhenMemberWasTeller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted (nullable)
+  --StartDate: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
+  --EndDate: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
+  --DivisionNumber: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (nullable, format: int32)
+  --TotalVotesCastComparator: string@TotalVotesCastComparator-completer # comparison operator to use
+  --TotalVotesCastValueToCompare: int # value to compare to with the operator provided (format: int32)
+  --MajorityComparator: string@MajorityComparator-completer # comparison operator to use
+  --MajorityValueToCompare: int # value to compare to with the operator provided (format: int32)
+  --skip: int # The number of records to skip. Must be a positive integer. Default is 0 (format: int32, default: 0)
+  --take: int # The number of records to return per page. Must be more than 0. Default is 25 (format: int32, default: 25)
+]: nothing -> table<amendmentMotionNotes: string, authoritativeContentCount: int, authoritativeNotContentCount: int, contentTellers: list<record>, contents: list<record>, date: string, divisionHadTellers: bool, divisionId: int, divisionWasExclusivelyRemote: bool, isGovernmentContent: bool, isGovernmentWin: bool, isHouse: bool, isWhipped: bool, memberContentCount: int, memberNotContentCount: int, notContentTellers: list<record>, notContents: list<record>, notes: string, number: int, remoteVotingEnd: string, remoteVotingStart: string, sponsoringMemberId: int, tellerContentCount: int, tellerNotContentCount: int, title: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "SearchTerm" $SearchTerm "scalar") (serialize-qp "MemberId" $MemberId "scalar") (serialize-qp "IncludeWhenMemberWasTeller" $IncludeWhenMemberWasTeller "scalar") (serialize-qp "StartDate" $StartDate "scalar") (serialize-qp "EndDate" $EndDate "scalar") (serialize-qp "DivisionNumber" $DivisionNumber "scalar") (serialize-qp "TotalVotesCast.Comparator" $TotalVotesCastComparator "scalar") (serialize-qp "TotalVotesCast.ValueToCompare" $TotalVotesCastValueToCompare "scalar") (serialize-qp "Majority.Comparator" $MajorityComparator "scalar") (serialize-qp "Majority.ValueToCompare" $MajorityValueToCompare "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/data/Divisions/search" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Return total results count
+#
+# GET /data/Divisions/searchTotalResults
+export def "data-divisions-search-total-results get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+  --SearchTerm: string # Divisions containing search term within title or number (nullable)
+  --MemberId: int # Divisions returning Member with Member ID voting records (nullable, format: int32)
+  --IncludeWhenMemberWasTeller: oneof<nothing, bool> # Divisions where member was a teller as well as if they actually voted (nullable)
+  --StartDate: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
+  --EndDate: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (nullable, format: date-time)
+  --DivisionNumber: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (nullable, format: int32)
+  --TotalVotesCastComparator: string@TotalVotesCastComparator-completer # comparison operator to use
+  --TotalVotesCastValueToCompare: int # value to compare to with the operator provided (format: int32)
+  --MajorityComparator: string@MajorityComparator-completer # comparison operator to use
+  --MajorityValueToCompare: int # value to compare to with the operator provided (format: int32)
+]: nothing -> int {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "SearchTerm" $SearchTerm "scalar") (serialize-qp "MemberId" $MemberId "scalar") (serialize-qp "IncludeWhenMemberWasTeller" $IncludeWhenMemberWasTeller "scalar") (serialize-qp "StartDate" $StartDate "scalar") (serialize-qp "EndDate" $EndDate "scalar") (serialize-qp "DivisionNumber" $DivisionNumber "scalar") (serialize-qp "TotalVotesCast.Comparator" $TotalVotesCastComparator "scalar") (serialize-qp "TotalVotesCast.ValueToCompare" $TotalVotesCastValueToCompare "scalar") (serialize-qp "Majority.Comparator" $MajorityComparator "scalar") (serialize-qp "Majority.ValueToCompare" $MajorityValueToCompare "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/data/Divisions/searchTotalResults" $qp)
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Return a Division
+#
+# GET /data/Divisions/{divisionId}
+export def "data-divisions get" [
+  divisionId: int
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
+]: nothing -> record<amendmentMotionNotes: string, authoritativeContentCount: int, authoritativeNotContentCount: int, contentTellers: table<listAs: string, memberFrom: string, memberId: int, name: string, party: string, partyAbbreviation: string, partyColour: string, partyIsMainParty: bool>, contents: table<listAs: string, memberFrom: string, memberId: int, name: string, party: string, partyAbbreviation: string, partyColour: string, partyIsMainParty: bool>, date: string, divisionHadTellers: bool, divisionId: int, divisionWasExclusivelyRemote: bool, isGovernmentContent: bool, isGovernmentWin: bool, isHouse: bool, isWhipped: bool, memberContentCount: int, memberNotContentCount: int, notContentTellers: table<listAs: string, memberFrom: string, memberId: int, name: string, party: string, partyAbbreviation: string, partyColour: string, partyIsMainParty: bool>, notContents: table<listAs: string, memberFrom: string, memberId: int, name: string, party: string, partyAbbreviation: string, partyColour: string, partyIsMainParty: bool>, notes: string, number: int, remoteVotingEnd: string, remoteVotingStart: string, sponsoringMemberId: int, tellerContentCount: int, tellerNotContentCount: int, title: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/data/Divisions/($divisionId)")
+  let accept_val = ($accept | default "application/json")
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}

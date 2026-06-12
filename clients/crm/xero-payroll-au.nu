@@ -1,0 +1,913 @@
+# Auto-generated client for Xero Payroll AU API v2.9.4
+# Source: https://api.apis.guru/v2/specs/xero.com/xero-payroll-au/2.9.4/openapi.json
+# Auth: --token flag or $env.XERO_PAYROLL_AU_API_TOKEN
+
+const BASE_URL = "https://api.xero.com/payroll.xro/1.0"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o XERO_PAYROLL_AU_API_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["https://api.xero.com/payroll.xro/1.0"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "employees list" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Searches payroll employees
+#
+# GET /Employees
+# operationId: getEmployees
+export def "employees list" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --qp-where: string # Filter by an any element (e.g. Status=="ACTIVE")
+  --order: string # Order by an any element (e.g. EmailAddress%20DESC)
+  --page: int # e.g. page=1 – Up to 100 employees will be returned in a single API call
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+  --If-Modified-Since: string # Only records created or modified since this timestamp will be returned
+]: nothing -> record<Employees: table<BankAccounts: list, Classification: string, DateOfBirth: string, Email: string, EmployeeGroupName: string, EmployeeID: string, FirstName: string, Gender: string, HomeAddress: record, IsAuthorisedToApproveLeave: bool, IsAuthorisedToApproveTimesheets: bool, JobTitle: string, LastName: string, LeaveBalances: list, LeaveLines: list, MiddleNames: string, Mobile: string, OpeningBalances: record, OrdinaryEarningsRateID: string, PayTemplate: record, PayrollCalendarID: string, Phone: string, StartDate: string, Status: string, SuperMemberships: list, TaxDeclaration: record, TerminationDate: string, Title: string, TwitterUserName: string, UpdatedDateUTC: string, ValidationErrors: list>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/Employees" $qp)
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id, "If-Modified-Since": $If_Modified_Since} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a payroll employee
+#
+# POST /Employees
+# operationId: createEmployee
+export def "employees createEmployee" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+  --body: record
+]: any -> record<Employees: table<BankAccounts: list, Classification: string, DateOfBirth: string, Email: string, EmployeeGroupName: string, EmployeeID: string, FirstName: string, Gender: string, HomeAddress: record, IsAuthorisedToApproveLeave: bool, IsAuthorisedToApproveTimesheets: bool, JobTitle: string, LastName: string, LeaveBalances: list, LeaveLines: list, MiddleNames: string, Mobile: string, OpeningBalances: record, OrdinaryEarningsRateID: string, PayTemplate: record, PayrollCalendarID: string, Phone: string, StartDate: string, Status: string, SuperMemberships: list, TaxDeclaration: record, TerminationDate: string, Title: string, TwitterUserName: string, UpdatedDateUTC: string, ValidationErrors: list>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/Employees")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieves an employee's detail by unique employee id
+#
+# GET /Employees/{EmployeeID}
+# operationId: getEmployee
+export def "employees get" [
+  EmployeeID: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+]: nothing -> record<Employees: table<BankAccounts: list, Classification: string, DateOfBirth: string, Email: string, EmployeeGroupName: string, EmployeeID: string, FirstName: string, Gender: string, HomeAddress: record, IsAuthorisedToApproveLeave: bool, IsAuthorisedToApproveTimesheets: bool, JobTitle: string, LastName: string, LeaveBalances: list, LeaveLines: list, MiddleNames: string, Mobile: string, OpeningBalances: record, OrdinaryEarningsRateID: string, PayTemplate: record, PayrollCalendarID: string, Phone: string, StartDate: string, Status: string, SuperMemberships: list, TaxDeclaration: record, TerminationDate: string, Title: string, TwitterUserName: string, UpdatedDateUTC: string, ValidationErrors: list>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/Employees/($EmployeeID)")
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates an employee's detail
+#
+# POST /Employees/{EmployeeID}
+# operationId: updateEmployee
+export def "employees updateEmployee" [
+  EmployeeID: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+  --body: record
+]: any -> record<Employees: table<BankAccounts: list, Classification: string, DateOfBirth: string, Email: string, EmployeeGroupName: string, EmployeeID: string, FirstName: string, Gender: string, HomeAddress: record, IsAuthorisedToApproveLeave: bool, IsAuthorisedToApproveTimesheets: bool, JobTitle: string, LastName: string, LeaveBalances: list, LeaveLines: list, MiddleNames: string, Mobile: string, OpeningBalances: record, OrdinaryEarningsRateID: string, PayTemplate: record, PayrollCalendarID: string, Phone: string, StartDate: string, Status: string, SuperMemberships: list, TaxDeclaration: record, TerminationDate: string, Title: string, TwitterUserName: string, UpdatedDateUTC: string, ValidationErrors: list>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/Employees/($EmployeeID)")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieves leave applications
+#
+# GET /LeaveApplications
+# operationId: getLeaveApplications
+export def "leave-applications list" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --qp-where: string # Filter by an any element (e.g. Status=="ACTIVE")
+  --order: string # Order by an any element (e.g. EmailAddress%20DESC)
+  --page: int # e.g. page=1 – Up to 100 objects will be returned in a single API call
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+  --If-Modified-Since: string # Only records created or modified since this timestamp will be returned
+]: nothing -> record<LeaveApplications: table<Description: string, EmployeeID: string, EndDate: string, LeaveApplicationID: string, LeavePeriods: list, LeaveTypeID: string, StartDate: string, Title: string, UpdatedDateUTC: string, ValidationErrors: list>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/LeaveApplications" $qp)
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id, "If-Modified-Since": $If_Modified_Since} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a leave application
+#
+# POST /LeaveApplications
+# operationId: createLeaveApplication
+export def "leave-applications createLeaveApplication" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+  --body: record
+]: any -> record<LeaveApplications: table<Description: string, EmployeeID: string, EndDate: string, LeaveApplicationID: string, LeavePeriods: list, LeaveTypeID: string, StartDate: string, Title: string, UpdatedDateUTC: string, ValidationErrors: list>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/LeaveApplications")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieves a leave application by a unique leave application id
+#
+# GET /LeaveApplications/{LeaveApplicationID}
+# operationId: getLeaveApplication
+export def "leave-applications get" [
+  LeaveApplicationID: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+]: nothing -> record<LeaveApplications: table<Description: string, EmployeeID: string, EndDate: string, LeaveApplicationID: string, LeavePeriods: list, LeaveTypeID: string, StartDate: string, Title: string, UpdatedDateUTC: string, ValidationErrors: list>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/LeaveApplications/($LeaveApplicationID)")
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates a specific leave application
+#
+# POST /LeaveApplications/{LeaveApplicationID}
+# operationId: updateLeaveApplication
+export def "leave-applications updateLeaveApplication" [
+  LeaveApplicationID: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+  --body: record
+]: any -> record<LeaveApplications: table<Description: string, EmployeeID: string, EndDate: string, LeaveApplicationID: string, LeavePeriods: list, LeaveTypeID: string, StartDate: string, Title: string, UpdatedDateUTC: string, ValidationErrors: list>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/LeaveApplications/($LeaveApplicationID)")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieves pay items
+#
+# GET /PayItems
+# operationId: getPayItems
+export def "pay-items get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --qp-where: string # Filter by an any element (e.g. Status=="ACTIVE")
+  --order: string # Order by an any element (e.g. EmailAddress%20DESC)
+  --page: int # e.g. page=1 – Up to 100 objects will be returned in a single API call
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+  --If-Modified-Since: string # Only records created or modified since this timestamp will be returned
+]: nothing -> record<PayItems: record<DeductionTypes: list<record>, EarningsRates: list<record>, LeaveTypes: list<record>, ReimbursementTypes: list<record>>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/PayItems" $qp)
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id, "If-Modified-Since": $If_Modified_Since} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a pay item
+#
+# POST /PayItems
+# operationId: createPayItem
+# --DeductionTypes item shape: {AccountCode?: string, CurrentRecord?: bool, DeductionCategory?: "NONE"|"UNIONFEES"|"WORKPLACEGIVING", DeductionTypeID?: string, IsExemptFromW1?: bool, Name?: string, ReducesSuper?: bool, ReducesTax?: bool}
+# --EarningsRates item shape: {AccountCode?: string, AccrueLeave?: bool, AllowanceType?: "CAR"|"TRANSPORT"|"TRAVEL"|"LAUNDRY"|"MEALS"|"JOBKEEPER"|"OTHER", Amount?: float, CurrentRecord?: bool, EarningsRateID?: string, EarningsType?: "FIXED"|"ORDINARYTIMEEARNINGS"|"OVERTIMEEARNINGS"|"ALLOWANCE"|"LUMPSUMD"|"EMPLOYMENTTERMINATIONPAYMENT"|"LUMPSUMA"|"LUMPSUMB"|"BONUSESANDCOMMISSIONS"|"LUMPSUME", EmploymentTerminationPaymentType?: "O"|"R", IsExemptFromSuper?: bool, IsExemptFromTax?: bool, IsReportableAsW1?: bool, Multiplier?: float, Name?: string, RatePerUnit?: string, RateType?: "FIXEDAMOUNT"|"MULTIPLE"|"RATEPERUNIT", TypeOfUnits?: string}
+# --LeaveTypes item shape: {CurrentRecord?: bool, IsPaidLeave?: bool, LeaveLoadingRate?: float, LeaveTypeID?: string, Name?: string, NormalEntitlement?: float, ShowOnPayslip?: bool, TypeOfUnits?: string}
+# --ReimbursementTypes item shape: {AccountCode?: string, CurrentRecord?: bool, Name?: string, ReimbursementTypeID?: string}
+export def "pay-items createPayItem" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+  --DeductionTypes: list # item shape: {AccountCode?: string, CurrentRecord?: bool, DeductionCategory?: "NONE"|"UNIONFEES"|"WORKPLACEGIVING", DeductionTypeID?: string, IsExemptFromW1?: bool, Name?: string, ReducesSuper?: bool, ReducesTax?: bool}
+  --EarningsRates: list # item shape: {AccountCode?: string, AccrueLeave?: bool, AllowanceType?: "CAR"|"TRANSPORT"|"TRAVEL"|"LAUNDRY"|"MEALS"|"JOBKEEPER"|"OTHER", Amount?: float, CurrentRecord?: bool, EarningsRateID?: string, EarningsType?: "FIXED"|"ORDINARYTIMEEARNINGS"|"OVERTIMEEARNINGS"|"ALLOWANCE"|"LUMPSUMD"|"EMPLOYMENTTERMINATIONPAYMENT"|"LUMPSUMA"|"LUMPSUMB"|"BONUSESANDCOMMISSIONS"|"LUMPSUME", EmploymentTerminationPaymentType?: "O"|"R", IsExemptFromSuper?: bool, IsExemptFromTax?: bool, IsReportableAsW1?: bool, Multiplier?: float, Name?: string, RatePerUnit?: string, RateType?: "FIXEDAMOUNT"|"MULTIPLE"|"RATEPERUNIT", TypeOfUnits?: string}
+  --LeaveTypes: list # item shape: {CurrentRecord?: bool, IsPaidLeave?: bool, LeaveLoadingRate?: float, LeaveTypeID?: string, Name?: string, NormalEntitlement?: float, ShowOnPayslip?: bool, TypeOfUnits?: string}
+  --ReimbursementTypes: list # item shape: {AccountCode?: string, CurrentRecord?: bool, Name?: string, ReimbursementTypeID?: string}
+]: any -> record<PayItems: record<DeductionTypes: list<record>, EarningsRates: list<record>, LeaveTypes: list<record>, ReimbursementTypes: list<record>>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/PayItems")
+  let body = {DeductionTypes: $DeductionTypes, EarningsRates: $EarningsRates, LeaveTypes: $LeaveTypes, ReimbursementTypes: $ReimbursementTypes} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieves pay runs
+#
+# GET /PayRuns
+# operationId: getPayRuns
+export def "pay-runs list" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --qp-where: string # Filter by an any element (e.g. Status=="ACTIVE")
+  --order: string # Order by an any element (e.g. EmailAddress%20DESC)
+  --page: int # e.g. page=1 – Up to 100 PayRuns will be returned in a single API call
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+  --If-Modified-Since: string # Only records created or modified since this timestamp will be returned
+]: nothing -> record<PayRuns: table<Deductions: float, NetPay: float, PayRunID: string, PayRunPeriodEndDate: string, PayRunPeriodStartDate: string, PayRunStatus: string, PaymentDate: string, PayrollCalendarID: string, PayslipMessage: string, Payslips: list, Reimbursement: float, Super: float, Tax: float, UpdatedDateUTC: string, ValidationErrors: list, Wages: float>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/PayRuns" $qp)
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id, "If-Modified-Since": $If_Modified_Since} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a pay run
+#
+# POST /PayRuns
+# operationId: createPayRun
+export def "pay-runs createPayRun" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+  --body: record
+]: any -> record<PayRuns: table<Deductions: float, NetPay: float, PayRunID: string, PayRunPeriodEndDate: string, PayRunPeriodStartDate: string, PayRunStatus: string, PaymentDate: string, PayrollCalendarID: string, PayslipMessage: string, Payslips: list, Reimbursement: float, Super: float, Tax: float, UpdatedDateUTC: string, ValidationErrors: list, Wages: float>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/PayRuns")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieves a pay run by using a unique pay run id
+#
+# GET /PayRuns/{PayRunID}
+# operationId: getPayRun
+export def "pay-runs get" [
+  PayRunID: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+]: nothing -> record<PayRuns: table<Deductions: float, NetPay: float, PayRunID: string, PayRunPeriodEndDate: string, PayRunPeriodStartDate: string, PayRunStatus: string, PaymentDate: string, PayrollCalendarID: string, PayslipMessage: string, Payslips: list, Reimbursement: float, Super: float, Tax: float, UpdatedDateUTC: string, ValidationErrors: list, Wages: float>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/PayRuns/($PayRunID)")
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates a pay run
+#
+# POST /PayRuns/{PayRunID}
+# operationId: updatePayRun
+export def "pay-runs updatePayRun" [
+  PayRunID: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+  --body: record
+]: any -> record<PayRuns: table<Deductions: float, NetPay: float, PayRunID: string, PayRunPeriodEndDate: string, PayRunPeriodStartDate: string, PayRunStatus: string, PaymentDate: string, PayrollCalendarID: string, PayslipMessage: string, Payslips: list, Reimbursement: float, Super: float, Tax: float, UpdatedDateUTC: string, ValidationErrors: list, Wages: float>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/PayRuns/($PayRunID)")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieves payroll calendars
+#
+# GET /PayrollCalendars
+# operationId: getPayrollCalendars
+export def "payroll-calendars list" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --qp-where: string # Filter by an any element (e.g. Status=="ACTIVE")
+  --order: string # Order by an any element (e.g. EmailAddress%20DESC)
+  --page: int # e.g. page=1 – Up to 100 objects will be returned in a single API call
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+  --If-Modified-Since: string # Only records created or modified since this timestamp will be returned
+]: nothing -> record<PayrollCalendars: table<CalendarType: string, Name: string, PaymentDate: string, PayrollCalendarID: string, StartDate: string, UpdatedDateUTC: string, ValidationErrors: list>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/PayrollCalendars" $qp)
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id, "If-Modified-Since": $If_Modified_Since} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a Payroll Calendar
+#
+# POST /PayrollCalendars
+# operationId: createPayrollCalendar
+export def "payroll-calendars createPayrollCalendar" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+  --body: record
+]: any -> record<PayrollCalendars: table<CalendarType: string, Name: string, PaymentDate: string, PayrollCalendarID: string, StartDate: string, UpdatedDateUTC: string, ValidationErrors: list>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/PayrollCalendars")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieves payroll calendar by using a unique payroll calendar ID
+#
+# GET /PayrollCalendars/{PayrollCalendarID}
+# operationId: getPayrollCalendar
+export def "payroll-calendars get" [
+  PayrollCalendarID: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+]: nothing -> record<PayrollCalendars: table<CalendarType: string, Name: string, PaymentDate: string, PayrollCalendarID: string, StartDate: string, UpdatedDateUTC: string, ValidationErrors: list>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/PayrollCalendars/($PayrollCalendarID)")
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves for a payslip by a unique payslip id
+#
+# GET /Payslip/{PayslipID}
+# operationId: getPayslip
+export def "payslip get" [
+  PayslipID: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+]: nothing -> record<Payslip: record<DeductionLines: list<record>, Deductions: float, EarningsLines: list<record>, EmployeeID: string, FirstName: string, LastName: string, LeaveAccrualLines: list<record>, LeaveEarningsLines: list<record>, NetPay: float, PayslipID: string, ReimbursementLines: list<record>, Reimbursements: float, Super: float, SuperannuationLines: list<record>, Tax: float, TaxLines: list<record>, TimesheetEarningsLines: list<record>, UpdatedDateUTC: string, Wages: float>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/Payslip/($PayslipID)")
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates a payslip
+#
+# POST /Payslip/{PayslipID}
+# operationId: updatePayslip
+export def "payslip updatePayslip" [
+  PayslipID: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+  --body: record
+]: any -> record<Payslips: table<DeductionLines: list, Deductions: float, EarningsLines: list, EmployeeID: string, FirstName: string, LastName: string, LeaveAccrualLines: list, LeaveEarningsLines: list, NetPay: float, PayslipID: string, ReimbursementLines: list, Reimbursements: float, Super: float, SuperannuationLines: list, Tax: float, TaxLines: list, TimesheetEarningsLines: list, UpdatedDateUTC: string, Wages: float>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/Payslip/($PayslipID)")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieves payroll settings
+#
+# GET /Settings
+# operationId: getSettings
+export def "settings get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+]: nothing -> record<Settings: record<Accounts: list<record>, DaysInPayrollYear: int, TrackingCategories: record<EmployeeGroups: record, TimesheetCategories: record>>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/Settings")
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves superfund products
+#
+# GET /SuperfundProducts
+# operationId: getSuperfundProducts
+export def "superfund-products get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --ABN: string # The ABN of the Regulated SuperFund (e.g. 40022701955)
+  --USI: string # The USI of the Regulated SuperFund (e.g. OSF0001AU)
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+]: nothing -> record<SuperFundProducts: table<ABN: string, ProductName: string, SPIN: string, USI: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "ABN" $ABN "scalar") (serialize-qp "USI" $USI "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/SuperfundProducts" $qp)
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Retrieves superfunds
+#
+# GET /Superfunds
+# operationId: getSuperfunds
+export def "superfunds list" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --qp-where: string # Filter by an any element (e.g. Status=="ACTIVE")
+  --order: string # Order by an any element (e.g. EmailAddress%20DESC)
+  --page: int # e.g. page=1 – Up to 100 SuperFunds will be returned in a single API call
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+  --If-Modified-Since: string # Only records created or modified since this timestamp will be returned
+]: nothing -> record<SuperFunds: table<ABN: string, AccountName: string, AccountNumber: string, BSB: string, ElectronicServiceAddress: string, EmployerNumber: string, Name: string, SPIN: string, SuperFundID: string, Type: string, USI: string, UpdatedDateUTC: string, ValidationErrors: list>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/Superfunds" $qp)
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id, "If-Modified-Since": $If_Modified_Since} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a superfund
+#
+# POST /Superfunds
+# operationId: createSuperfund
+export def "superfunds createSuperfund" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+  --body: record
+]: any -> record<SuperFunds: table<ABN: string, AccountName: string, AccountNumber: string, BSB: string, ElectronicServiceAddress: string, EmployerNumber: string, Name: string, SPIN: string, SuperFundID: string, Type: string, USI: string, UpdatedDateUTC: string, ValidationErrors: list>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/Superfunds")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieves a superfund by using a unique superfund ID
+#
+# GET /Superfunds/{SuperFundID}
+# operationId: getSuperfund
+export def "superfunds get" [
+  SuperFundID: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+]: nothing -> record<SuperFunds: table<ABN: string, AccountName: string, AccountNumber: string, BSB: string, ElectronicServiceAddress: string, EmployerNumber: string, Name: string, SPIN: string, SuperFundID: string, Type: string, USI: string, UpdatedDateUTC: string, ValidationErrors: list>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/Superfunds/($SuperFundID)")
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates a superfund
+#
+# POST /Superfunds/{SuperFundID}
+# operationId: updateSuperfund
+export def "superfunds updateSuperfund" [
+  SuperFundID: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+  --body: record
+]: any -> record<SuperFunds: table<ABN: string, AccountName: string, AccountNumber: string, BSB: string, ElectronicServiceAddress: string, EmployerNumber: string, Name: string, SPIN: string, SuperFundID: string, Type: string, USI: string, UpdatedDateUTC: string, ValidationErrors: list>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/Superfunds/($SuperFundID)")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieves timesheets
+#
+# GET /Timesheets
+# operationId: getTimesheets
+export def "timesheets list" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --qp-where: string # Filter by an any element (e.g. Status=="ACTIVE")
+  --order: string # Order by an any element (e.g. EmailAddress%20DESC)
+  --page: int # e.g. page=1 – Up to 100 timesheets will be returned in a single API call
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+  --If-Modified-Since: string # Only records created or modified since this timestamp will be returned
+]: nothing -> record<Timesheets: table<EmployeeID: string, EndDate: string, Hours: float, StartDate: string, Status: string, TimesheetID: string, TimesheetLines: list, UpdatedDateUTC: string, ValidationErrors: list>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "where" $qp_where "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/Timesheets" $qp)
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id, "If-Modified-Since": $If_Modified_Since} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a timesheet
+#
+# POST /Timesheets
+# operationId: createTimesheet
+export def "timesheets createTimesheet" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+  --body: record
+]: any -> record<Timesheets: table<EmployeeID: string, EndDate: string, Hours: float, StartDate: string, Status: string, TimesheetID: string, TimesheetLines: list, UpdatedDateUTC: string, ValidationErrors: list>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/Timesheets")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Retrieves a timesheet by using a unique timesheet id
+#
+# GET /Timesheets/{TimesheetID}
+# operationId: getTimesheet
+export def "timesheets get" [
+  TimesheetID: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+]: nothing -> record<Timesheet: record<EmployeeID: string, EndDate: string, Hours: float, StartDate: string, Status: string, TimesheetID: string, TimesheetLines: list<record>, UpdatedDateUTC: string, ValidationErrors: list<record>>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/Timesheets/($TimesheetID)")
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates a timesheet
+#
+# POST /Timesheets/{TimesheetID}
+# operationId: updateTimesheet
+export def "timesheets updateTimesheet" [
+  TimesheetID: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --Xero-Tenant-Id: string # Xero identifier for Tenant
+  --body: record
+]: any -> record<Timesheets: table<EmployeeID: string, EndDate: string, Hours: float, StartDate: string, Status: string, TimesheetID: string, TimesheetLines: list, UpdatedDateUTC: string, ValidationErrors: list>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/Timesheets/($TimesheetID)")
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let extra_headers = {"Xero-Tenant-Id": $Xero_Tenant_Id} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}

@@ -1,0 +1,1318 @@
+# Auto-generated client for OpenAQ v2.0.0
+# Source: https://api.apis.guru/v2/specs/openaq.local/2.0.0/openapi.json
+# Auth: --token flag or $env.OPENAQ_TOKEN
+
+const BASE_URL = "http://openaq.local"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o OPENAQ_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["http://openaq.local"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+# Completers for enum parameters
+def entity-completer [] { ["community" "government" "research"] }
+def sensorType-completer [] { ["low-cost sensor" "reference grade"] }
+def spatial-completer [] { ["country" "location" "project" "total"] }
+def temporal-completer [] { ["day" "dow" "hod" "hour" "month" "moy" "year"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "faviconico get" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Favico
+#
+# GET /favicon.ico
+# operationId: favico_favicon_ico_get
+export def "faviconico get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/favicon.ico")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Pong
+#
+# GET /ping
+# operationId: pong_ping_get
+export def "ping get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/ping")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Provides a simple listing of cities within the platform
+#
+# GET /v1/cities
+# operationId: cities_getv1_v1_cities_get
+export def "cities get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --limit: int # Change the number of results returned. (default: 100)
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Define sort order. (default: asc)
+  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
+  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --order-by: string # Order by a field (default: city)
+  --entity: string
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<city: string, count: int, country: string, firstUpdated: string, lastUpdated: string, locations: int, parameters: list>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "entity" $entity "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/cities" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Countries Getv1
+#
+# GET /v1/countries
+# operationId: countries_getv1_v1_countries_get
+export def "countries get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --limit: int # default: 200
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Define sort order. (default: asc)
+  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
+  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --order-by: string # default: country
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<cities: int, code: string, count: int, firstUpdated: string, lastUpdated: string, locations: int, name: string, parameters: list, sources: int>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/countries" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Countries Get
+#
+# GET /v1/countries/{country_id}
+# operationId: countries_get_v1_countries__country_id__get
+export def "countries get-by-country_id" [
+  country_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --limit: int # default: 200
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Define sort order. (default: asc)
+  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --order-by: string # default: country
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<cities: int, code: string, count: int, firstUpdated: string, lastUpdated: string, locations: int, name: string, parameters: list, sources: int>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "country" $country "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/countries/($country_id)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Latest V1 Get
+#
+# GET /v1/latest
+# operationId: latest_v1_get_v1_latest_get
+export def "latest get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --limit: int # Change the number of results returned. (default: 100)
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Sort Direction (default: desc)
+  --has-geo: oneof<nothing, bool>
+  --parameter-id: int
+  --parameter: list
+  --unit: list
+  --coordinates: string
+  --radius: int # default: 1000
+  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
+  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --location-id: int
+  --location: list
+  --order-by: string # Order by a field (default: lastUpdated)
+  --isMobile: oneof<nothing, bool> # Location is mobile
+  --isAnalysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
+  --sourceName: list # Name of the data source
+  --entity: string # Source entity type.
+  --sensorType: string # Type of Sensor
+  --modelName: list # Model Name of Sensor
+  --manufacturerName: list # Manufacturer of Sensor
+  --dumpRaw: oneof<nothing, bool> # default: false
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "modelName" $modelName "multi") (serialize-qp "manufacturerName" $manufacturerName "multi") (serialize-qp "dumpRaw" $dumpRaw "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/latest" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Latest V1 Get
+#
+# GET /v1/latest/{location_id}
+# operationId: latest_v1_get_v1_latest__location_id__get
+export def "latest get-by-location_id" [
+  location_id: int
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --limit: int # Change the number of results returned. (default: 100)
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Sort Direction (default: desc)
+  --has-geo: oneof<nothing, bool>
+  --parameter-id: int
+  --parameter: list
+  --unit: list
+  --coordinates: string
+  --radius: int # default: 1000
+  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
+  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --location: list
+  --order-by: string # Order by a field (default: lastUpdated)
+  --isMobile: oneof<nothing, bool> # Location is mobile
+  --isAnalysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
+  --sourceName: list # Name of the data source
+  --entity: string # Source entity type.
+  --sensorType: string # Type of Sensor
+  --modelName: list # Model Name of Sensor
+  --manufacturerName: list # Manufacturer of Sensor
+  --dumpRaw: oneof<nothing, bool> # default: false
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "modelName" $modelName "multi") (serialize-qp "manufacturerName" $manufacturerName "multi") (serialize-qp "dumpRaw" $dumpRaw "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/latest/($location_id)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Locationsv1 Get
+#
+# GET /v1/locations
+# operationId: locationsv1_get_v1_locations_get
+export def "locations get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --limit: int # Change the number of results returned. (default: 100)
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Sort Direction (default: desc)
+  --has-geo: oneof<nothing, bool>
+  --parameter-id: int
+  --parameter: list
+  --unit: list
+  --coordinates: string
+  --radius: int # default: 1000
+  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
+  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --location-id: int
+  --location: list
+  --order-by: string # Order by a field (default: lastUpdated)
+  --isMobile: oneof<nothing, bool> # Location is mobile
+  --isAnalysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
+  --sourceName: list # Name of the data source
+  --entity: string # Source entity type.
+  --sensorType: string # Type of Sensor
+  --modelName: list # Model Name of Sensor
+  --manufacturerName: list # Manufacturer of Sensor
+  --dumpRaw: oneof<nothing, bool> # default: false
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "modelName" $modelName "multi") (serialize-qp "manufacturerName" $manufacturerName "multi") (serialize-qp "dumpRaw" $dumpRaw "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/locations" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Locationsv1 Get
+#
+# GET /v1/locations/{location_id}
+# operationId: locationsv1_get_v1_locations__location_id__get
+export def "locations get-by-location_id" [
+  location_id: int
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --limit: int # Change the number of results returned. (default: 100)
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Sort Direction (default: desc)
+  --has-geo: oneof<nothing, bool>
+  --parameter-id: int
+  --parameter: list
+  --unit: list
+  --coordinates: string
+  --radius: int # default: 1000
+  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
+  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --location: list
+  --order-by: string # Order by a field (default: lastUpdated)
+  --isMobile: oneof<nothing, bool> # Location is mobile
+  --isAnalysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
+  --sourceName: list # Name of the data source
+  --entity: string # Source entity type.
+  --sensorType: string # Type of Sensor
+  --modelName: list # Model Name of Sensor
+  --manufacturerName: list # Manufacturer of Sensor
+  --dumpRaw: oneof<nothing, bool> # default: false
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "modelName" $modelName "multi") (serialize-qp "manufacturerName" $manufacturerName "multi") (serialize-qp "dumpRaw" $dumpRaw "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/locations/($location_id)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Measurements Get V1
+#
+# GET /v1/measurements
+# operationId: measurements_get_v1_v1_measurements_get
+export def "measurements get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --format: string
+  --date-from: string # default: 2000-01-01T00:00:00+00:00
+  --date-to: string # default: 2021-08-23T09:48:00+00:00
+  --limit: int # Change the number of results returned. (default: 100)
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # default: desc
+  --has-geo: oneof<nothing, bool>
+  --parameter-id: int
+  --parameter: list
+  --unit: list
+  --coordinates: string
+  --radius: int # default: 1000
+  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
+  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --location-id: int
+  --location: list
+  --order-by: string # default: datetime
+  --isMobile: oneof<nothing, bool>
+  --isAnalysis: oneof<nothing, bool>
+  --project: int
+  --entity: string@entity-completer
+  --sensorType: string@sensorType-completer
+  --value-from: float
+  --value-to: float
+  --include-fields: string
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "value_from" $value_from "scalar") (serialize-qp "value_to" $value_to "scalar") (serialize-qp "include_fields" $include_fields "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/measurements" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Parameters Getv1
+#
+# GET /v1/parameters
+# operationId: parameters_getv1_v1_parameters_get
+export def "parameters get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --limit: int # Change the number of results returned. (default: 100)
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Define sort order. (default: asc)
+  --sourceName: list
+  --sourceId: list
+  --sourceSlug: list
+  --order-by: string # default: id
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<description: string, displayName: string, id: int, isCore: bool, maxColorValue: float, name: string, preferredUnit: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "sourceId" $sourceId "multi") (serialize-qp "sourceSlug" $sourceSlug "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/parameters" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Sources V1 Get
+#
+# GET /v1/sources
+# operationId: sources_v1_get_v1_sources_get
+export def "sources get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --limit: int # Change the number of results returned. (default: 100)
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Define sort order. (default: asc)
+  --name: string
+  --order-by: string # default: name
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/sources" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Averages V2 Get
+#
+# GET /v2/averages
+# operationId: averages_v2_get_v2_averages_get
+export def "averages get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --date-from: string # default: 2000-01-01T00:00:00+00:00
+  --date-to: string # default: 2021-08-23T09:48:00+00:00
+  --parameter-id: int
+  --parameter: list
+  --unit: list
+  --project-id: int
+  --project: list
+  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
+  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --limit: int # Change the number of results returned. (default: 100)
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Define sort order. (default: desc)
+  --spatial: string@spatial-completer
+  --temporal: string@temporal-completer
+  --location: list
+  --group: oneof<nothing, bool> # default: false
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "project_id" $project_id "scalar") (serialize-qp "project" $project "multi") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "spatial" $spatial "scalar") (serialize-qp "temporal" $temporal "scalar") (serialize-qp "location" $location "multi") (serialize-qp "group" $group "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v2/averages" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Provides a simple listing of cities within the platform
+#
+# GET /v2/cities
+# operationId: cities_get_v2_cities_get
+export def "cities get-1" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --limit: int # Change the number of results returned. (default: 100)
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Define sort order. (default: asc)
+  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
+  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --order-by: string # Order by a field (default: city)
+  --entity: string
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<city: string, count: int, country: string, firstUpdated: string, lastUpdated: string, locations: int, parameters: list>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "entity" $entity "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v2/cities" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Countries Get
+#
+# GET /v2/countries
+# operationId: countries_get_v2_countries_get
+export def "countries get-1" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --limit: int # default: 200
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Define sort order. (default: asc)
+  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
+  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --order-by: string # default: country
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<cities: int, code: string, count: int, firstUpdated: string, lastUpdated: string, locations: int, name: string, parameters: list, sources: int>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v2/countries" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Countries Get
+#
+# GET /v2/countries/{country_id}
+# operationId: countries_get_v2_countries__country_id__get
+export def "countries get-by-country_id-1" [
+  country_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --limit: int # default: 200
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Define sort order. (default: asc)
+  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --order-by: string # default: country
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<cities: int, code: string, count: int, firstUpdated: string, lastUpdated: string, locations: int, name: string, parameters: list, sources: int>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "country" $country "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v2/countries/($country_id)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Latest Get
+#
+# GET /v2/latest
+# operationId: latest_get_v2_latest_get
+export def "latest get-1" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --limit: int # Change the number of results returned. (default: 100)
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Sort Direction (default: desc)
+  --has-geo: oneof<nothing, bool>
+  --parameter-id: int
+  --parameter: list
+  --unit: list
+  --coordinates: string
+  --radius: int # default: 1000
+  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
+  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --location-id: int
+  --location: list
+  --order-by: string # Order by a field (default: lastUpdated)
+  --isMobile: oneof<nothing, bool> # Location is mobile
+  --isAnalysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
+  --sourceName: list # Name of the data source
+  --entity: string # Source entity type.
+  --sensorType: string # Type of Sensor
+  --modelName: list # Model Name of Sensor
+  --manufacturerName: list # Manufacturer of Sensor
+  --dumpRaw: oneof<nothing, bool> # default: false
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "modelName" $modelName "multi") (serialize-qp "manufacturerName" $manufacturerName "multi") (serialize-qp "dumpRaw" $dumpRaw "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v2/latest" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Latest Get
+#
+# GET /v2/latest/{location_id}
+# operationId: latest_get_v2_latest__location_id__get
+export def "latest get-by-location_id-1" [
+  location_id: int
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --limit: int # Change the number of results returned. (default: 100)
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Sort Direction (default: desc)
+  --has-geo: oneof<nothing, bool>
+  --parameter-id: int
+  --parameter: list
+  --unit: list
+  --coordinates: string
+  --radius: int # default: 1000
+  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
+  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --location: list
+  --order-by: string # Order by a field (default: lastUpdated)
+  --isMobile: oneof<nothing, bool> # Location is mobile
+  --isAnalysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
+  --sourceName: list # Name of the data source
+  --entity: string # Source entity type.
+  --sensorType: string # Type of Sensor
+  --modelName: list # Model Name of Sensor
+  --manufacturerName: list # Manufacturer of Sensor
+  --dumpRaw: oneof<nothing, bool> # default: false
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "modelName" $modelName "multi") (serialize-qp "manufacturerName" $manufacturerName "multi") (serialize-qp "dumpRaw" $dumpRaw "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v2/latest/($location_id)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Locations Get
+#
+# GET /v2/locations
+# operationId: locations_get_v2_locations_get
+export def "locations get-1" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --limit: int # Change the number of results returned. (default: 100)
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Sort Direction (default: desc)
+  --has-geo: oneof<nothing, bool>
+  --parameter-id: int
+  --parameter: list
+  --unit: list
+  --coordinates: string
+  --radius: int # default: 1000
+  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
+  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --location-id: int
+  --location: list
+  --order-by: string # Order by a field (default: lastUpdated)
+  --isMobile: oneof<nothing, bool> # Location is mobile
+  --isAnalysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
+  --sourceName: list # Name of the data source
+  --entity: string # Source entity type.
+  --sensorType: string # Type of Sensor
+  --modelName: list # Model Name of Sensor
+  --manufacturerName: list # Manufacturer of Sensor
+  --dumpRaw: oneof<nothing, bool> # default: false
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "modelName" $modelName "multi") (serialize-qp "manufacturerName" $manufacturerName "multi") (serialize-qp "dumpRaw" $dumpRaw "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v2/locations" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Mobilegentilejson
+#
+# GET /v2/locations/tiles/mobile-generalized/tiles.json
+# operationId: mobilegentilejson_v2_locations_tiles_mobile_generalized_tiles_json_get
+export def "locations-tiles-mobile-generalized-tilesjson get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<attribution: string, bounds: list<float>, data: list<string>, description: string, grids: list<string>, legend: string, maxzoom: int, minzoom: int, name: string, scheme: string, template: string, tilejson: string, tiles: list<string>, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v2/locations/tiles/mobile-generalized/tiles.json")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get Mobilegentile
+#
+# GET /v2/locations/tiles/mobile-generalized/{z}/{x}/{y}.pbf
+# operationId: get_mobilegentile_v2_locations_tiles_mobile_generalized__z___x___y__pbf_get
+export def "locations-tiles-mobile-generalized get" [
+  z: int
+  x: int
+  y: int
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --parameter: string
+  --location: list # limit data to location id
+  --lastUpdatedFrom: string
+  --lastUpdatedTo: string
+  --isMobile: oneof<nothing, bool>
+  --project: int
+  --isAnalysis: oneof<nothing, bool>
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "parameter" $parameter "scalar") (serialize-qp "location" $location "multi") (serialize-qp "lastUpdatedFrom" $lastUpdatedFrom "scalar") (serialize-qp "lastUpdatedTo" $lastUpdatedTo "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v2/locations/tiles/mobile-generalized/($z)/($x)/($y).pbf" $qp)
+  let accept_val = "application/x-protobuf"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Mobiletilejson
+#
+# GET /v2/locations/tiles/mobile/tiles.json
+# operationId: mobiletilejson_v2_locations_tiles_mobile_tiles_json_get
+export def "locations-tiles-mobile-tilesjson get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<attribution: string, bounds: list<float>, data: list<string>, description: string, grids: list<string>, legend: string, maxzoom: int, minzoom: int, name: string, scheme: string, template: string, tilejson: string, tiles: list<string>, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v2/locations/tiles/mobile/tiles.json")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get Mobiletile
+#
+# GET /v2/locations/tiles/mobile/{z}/{x}/{y}.pbf
+# operationId: get_mobiletile_v2_locations_tiles_mobile__z___x___y__pbf_get
+export def "locations-tiles-mobile get" [
+  z: int
+  x: int
+  y: int
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --dateFrom: string
+  --dateTo: string
+  --parameter: string
+  --location: list # limit data to location id
+  --lastUpdatedFrom: string
+  --lastUpdatedTo: string
+  --isMobile: oneof<nothing, bool>
+  --project: int
+  --isAnalysis: oneof<nothing, bool>
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "dateFrom" $dateFrom "scalar") (serialize-qp "dateTo" $dateTo "scalar") (serialize-qp "parameter" $parameter "scalar") (serialize-qp "location" $location "multi") (serialize-qp "lastUpdatedFrom" $lastUpdatedFrom "scalar") (serialize-qp "lastUpdatedTo" $lastUpdatedTo "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v2/locations/tiles/mobile/($z)/($x)/($y).pbf" $qp)
+  let accept_val = "application/x-protobuf"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Tilejson
+#
+# GET /v2/locations/tiles/tiles.json
+# operationId: tilejson_v2_locations_tiles_tiles_json_get
+export def "locations-tiles-tilesjson get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<attribution: string, bounds: list<float>, data: list<string>, description: string, grids: list<string>, legend: string, maxzoom: int, minzoom: int, name: string, scheme: string, template: string, tilejson: string, tiles: list<string>, version: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v2/locations/tiles/tiles.json")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Demo
+#
+# GET /v2/locations/tiles/viewer
+# operationId: demo_v2_locations_tiles_viewer_get
+export def "locations-tiles-viewer get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v2/locations/tiles/viewer")
+  let accept_val = "text/html"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get Tile
+#
+# GET /v2/locations/tiles/{z}/{x}/{y}.pbf
+# operationId: get_tile_v2_locations_tiles__z___x___y__pbf_get
+export def "locations-tiles get" [
+  z: int
+  x: int
+  y: int
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --parameter: string
+  --location: list # limit data to location id
+  --lastUpdatedFrom: string
+  --lastUpdatedTo: string
+  --isMobile: oneof<nothing, bool>
+  --project: int
+  --isAnalysis: oneof<nothing, bool>
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "parameter" $parameter "scalar") (serialize-qp "location" $location "multi") (serialize-qp "lastUpdatedFrom" $lastUpdatedFrom "scalar") (serialize-qp "lastUpdatedTo" $lastUpdatedTo "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v2/locations/tiles/($z)/($x)/($y).pbf" $qp)
+  let accept_val = "application/x-protobuf"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Locations Get
+#
+# GET /v2/locations/{location_id}
+# operationId: locations_get_v2_locations__location_id__get
+export def "locations get-by-location_id-1" [
+  location_id: int
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --limit: int # Change the number of results returned. (default: 100)
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Sort Direction (default: desc)
+  --has-geo: oneof<nothing, bool>
+  --parameter-id: int
+  --parameter: list
+  --unit: list
+  --coordinates: string
+  --radius: int # default: 1000
+  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
+  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --location: list
+  --order-by: string # Order by a field (default: lastUpdated)
+  --isMobile: oneof<nothing, bool> # Location is mobile
+  --isAnalysis: oneof<nothing, bool> # Data is the product of a previous analysis/aggregation and not raw measurements
+  --sourceName: list # Name of the data source
+  --entity: string # Source entity type.
+  --sensorType: string # Type of Sensor
+  --modelName: list # Model Name of Sensor
+  --manufacturerName: list # Manufacturer of Sensor
+  --dumpRaw: oneof<nothing, bool> # default: false
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "modelName" $modelName "multi") (serialize-qp "manufacturerName" $manufacturerName "multi") (serialize-qp "dumpRaw" $dumpRaw "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v2/locations/($location_id)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Mfr Get
+#
+# GET /v2/manufacturers
+# operationId: mfr_get_v2_manufacturers_get
+export def "manufacturers get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v2/manufacturers")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Measurements Get
+#
+# GET /v2/measurements
+# operationId: measurements_get_v2_measurements_get
+export def "measurements get-1" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --format: string
+  --date-from: string # default: 2000-01-01T00:00:00+00:00
+  --date-to: string # default: 2021-08-23T09:48:00+00:00
+  --limit: int # Change the number of results returned. (default: 100)
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # default: desc
+  --has-geo: oneof<nothing, bool>
+  --parameter-id: int
+  --parameter: list
+  --unit: list
+  --coordinates: string
+  --radius: int # default: 1000
+  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
+  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --city: list #          Limit results by a certain city or cities.         (ex. ?city=Chicago or ?city=Chicago&city=Boston)         
+  --location-id: int
+  --location: list
+  --order-by: string # default: datetime
+  --isMobile: oneof<nothing, bool>
+  --isAnalysis: oneof<nothing, bool>
+  --project: int
+  --entity: string@entity-completer
+  --sensorType: string@sensorType-completer
+  --value-from: float
+  --value-to: float
+  --include-fields: string
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "has_geo" $has_geo "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "coordinates" $coordinates "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "city" $city "multi") (serialize-qp "location_id" $location_id "scalar") (serialize-qp "location" $location "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "value_from" $value_from "scalar") (serialize-qp "value_to" $value_to "scalar") (serialize-qp "include_fields" $include_fields "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v2/measurements" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Model Get
+#
+# GET /v2/models
+# operationId: model_get_v2_models_get
+export def "models get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v2/models")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Parameters Get
+#
+# GET /v2/parameters
+# operationId: parameters_get_v2_parameters_get
+export def "parameters get-1" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --limit: int # Change the number of results returned. (default: 100)
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Define sort order. (default: asc)
+  --sourceName: list
+  --sourceId: list
+  --sourceSlug: list
+  --order-by: string # default: id
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<description: string, displayName: string, id: int, isCore: bool, maxColorValue: float, name: string, preferredUnit: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "sourceId" $sourceId "multi") (serialize-qp "sourceSlug" $sourceSlug "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v2/parameters" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Projects Get
+#
+# GET /v2/projects
+# operationId: projects_get_v2_projects_get
+export def "projects list" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
+  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --limit: int # Change the number of results returned. (default: 100)
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Define sort order. (default: asc)
+  --parameter-id: int
+  --parameter: list
+  --unit: list
+  --project-id: int
+  --project: list
+  --order-by: string # default: lastUpdated
+  --isMobile: oneof<nothing, bool>
+  --isAnalysis: oneof<nothing, bool>
+  --entity: string
+  --sensorType: string
+  --sourceName: list
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<bbox: list, countries: list, entity: string, firstUpdated: string, id: int, isAnalysis: bool, isMobile: bool, lastUpdated: string, locationIds: list, locations: int, measurements: int, name: string, parameters: list, sensorType: string, sources: list, subtitle: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "project_id" $project_id "scalar") (serialize-qp "project" $project "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "sourceName" $sourceName "multi")] | flatten | str join "&"
+  let full_url = (build-url $base "/v2/projects" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Projects Get
+#
+# GET /v2/projects/{project_id}
+# operationId: projects_get_v2_projects__project_id__get
+export def "projects get" [
+  project_id: int
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --country-id: string #          Limit results by a certain country using two letter country code.         (ex. /US)         
+  --country: list #          Limit results by a certain country using two letter country code.         (ex. ?country=US or ?country=US&country=MX)         
+  --limit: int # Change the number of results returned. (default: 100)
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Define sort order. (default: asc)
+  --parameter-id: int
+  --parameter: list
+  --unit: list
+  --project: list
+  --order-by: string # default: lastUpdated
+  --isMobile: oneof<nothing, bool>
+  --isAnalysis: oneof<nothing, bool>
+  --entity: string
+  --sensorType: string
+  --sourceName: list
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: table<bbox: list, countries: list, entity: string, firstUpdated: string, id: int, isAnalysis: bool, isMobile: bool, lastUpdated: string, locationIds: list, locations: int, measurements: int, name: string, parameters: list, sensorType: string, sources: list, subtitle: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "country_id" $country_id "scalar") (serialize-qp "country" $country "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "parameter_id" $parameter_id "scalar") (serialize-qp "parameter" $parameter "multi") (serialize-qp "unit" $unit "multi") (serialize-qp "project" $project "multi") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "isMobile" $isMobile "scalar") (serialize-qp "isAnalysis" $isAnalysis "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "sensorType" $sensorType "scalar") (serialize-qp "sourceName" $sourceName "multi")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v2/projects/($project_id)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Sources Get
+#
+# GET /v2/sources
+# operationId: sources_get_v2_sources_get
+export def "sources get-1" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --limit: int # Change the number of results returned. (default: 100)
+  --page: int # Paginate through results. (default: 1)
+  --offset: int # default: 0
+  --qp-sort: string # Define sort order. (default: asc)
+  --sourceName: list
+  --sourceId: list
+  --sourceSlug: list
+  --order-by: string # default: sourceName
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sourceName" $sourceName "multi") (serialize-qp "sourceId" $sourceId "multi") (serialize-qp "sourceSlug" $sourceSlug "multi") (serialize-qp "order_by" $order_by "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v2/sources" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Readme Get
+#
+# GET /v2/sources/readme/{slug}
+# operationId: readme_get_v2_sources_readme__slug__get
+export def "sources-readme get" [
+  slug: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v2/sources/readme/($slug)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Summary Get
+#
+# GET /v2/summary
+# operationId: summary_get_v2_summary_get
+export def "summary get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+]: nothing -> record<meta: record<found: int, license: string, limit: int, name: string, page: int, website: string>, results: list<any>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/v2/summary")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}

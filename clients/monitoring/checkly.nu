@@ -2286,8 +2286,8 @@ export def "checks-heartbeats-availability get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startTime: string # format: date, default: 2026-06-11T21:01:13.411Z
-  --endTime: string # format: date, default: 2026-06-12T21:01:13.411Z
+  --startTime: string # format: date, default: 2026-06-11T21:50:16.650Z
+  --endTime: string # format: date, default: 2026-06-12T21:50:16.650Z
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<successRatio: record<previousPeriod: float, currentPeriod: float>, totalEntitiesCurrentPeriod: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2315,8 +2315,8 @@ export def "checks-heartbeats-events list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dry-run(-n) # Return the request that would be sent without executing it
-  --startTime: string # format: date, default: 2026-06-11T21:01:13.415Z
-  --endTime: string # format: date, default: 2026-06-12T21:01:13.415Z
+  --startTime: string # format: date, default: 2026-06-11T21:50:16.653Z
+  --endTime: string # format: date, default: 2026-06-12T21:50:16.653Z
   --limit: float # default: 10
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> table<events: list<record>, stats: record<last24Hours: record, last7Days: record>> {
@@ -4959,7 +4959,7 @@ export def "status-pages-incidents-incident-updates post" [
   --id: string
   description: string
   --status: string@status-completer-4
-  --publicIncidentUpdateDate: string # format: date-time, default: 2026-06-12T21:01:15.059Z
+  --publicIncidentUpdateDate: string # format: date-time, default: 2026-06-12T21:50:17.907Z
   --created-at: string # format: date
   --notifySubscribers: oneof<nothing, bool> # default: false
 ]: any -> record<id: string, description: string, status: string, publicIncidentUpdateDate: string, created_at: string, notifySubscribers: bool> {
@@ -5049,7 +5049,7 @@ export def "status-pages-incidents-incident-updates put" [
   --id: string
   description: string
   --status: string@status-completer-4
-  --publicIncidentUpdateDate: string # format: date-time, default: 2026-06-12T21:01:15.059Z
+  --publicIncidentUpdateDate: string # format: date-time, default: 2026-06-12T21:50:17.907Z
   --created-at: string # format: date
   --notifySubscribers: oneof<nothing, bool> # default: false
 ]: any -> record<id: string, description: string, status: string, publicIncidentUpdateDate: string, created_at: string, notifySubscribers: bool> {

@@ -1,0 +1,1008 @@
+# Auto-generated client for Firebase App Check API vv1
+# Source: https://api.apis.guru/v2/specs/googleapis.com/firebaseappcheck/v1/openapi.json
+# Auth: --token flag or $env.FIREBASE_APP_CHECK_API_TOKEN
+
+const BASE_URL = "https://firebaseappcheck.googleapis.com"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o FIREBASE_APP_CHECK_API_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["https://firebaseappcheck.googleapis.com"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+# Completers for enum parameters
+def xgafv-completer [] { ["1" "2"] }
+def alt-completer [] { ["json" "media" "proto"] }
+def enforcementMode-completer [] { ["ENFORCED" "OFF" "UNENFORCED"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects firebaseappcheckprojectsappsexchangeAppAttestAssertion" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Accepts an App Attest assertion and an artifact previously obtained from ExchangeAppAttestAttestation and verifies those with Apple. If valid, returns an AppCheckToken.
+#
+# POST /v1/{app}:exchangeAppAttestAssertion
+# operationId: firebaseappcheck.projects.apps.exchangeAppAttestAssertion
+export def "projects firebaseappcheckprojectsappsexchangeAppAttestAssertion" [
+  app: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --artifact: string # Required. The artifact returned by a previous call to ExchangeAppAttestAttestation. (format: byte)
+  --assertion: string # Required. The CBOR-encoded assertion returned by the client-side App Attest API. (format: byte)
+  --challenge: string # Required. A one-time challenge returned by an immediately prior call to GenerateAppAttestChallenge. (format: byte)
+]: any -> record<token: string, ttl: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($app):exchangeAppAttestAssertion" $qp)
+  let body = {artifact: $artifact, assertion: $assertion, challenge: $challenge} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Accepts an App Attest CBOR attestation and verifies it with Apple using your preconfigured team and bundle IDs. If valid, returns an attestation artifact that can later be exchanged for an AppCheckToken using ExchangeAppAttestAssertion. For convenience and performance, this method's response object will also contain an AppCheckToken (if the verification is successful).
+#
+# POST /v1/{app}:exchangeAppAttestAttestation
+# operationId: firebaseappcheck.projects.apps.exchangeAppAttestAttestation
+export def "projects firebaseappcheckprojectsappsexchangeAppAttestAttestation" [
+  app: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --attestationStatement: string # Required. The App Attest statement returned by the client-side App Attest API. This is a base64url encoded CBOR object in the JSON response. (format: byte)
+  --challenge: string # Required. A one-time challenge returned by an immediately prior call to GenerateAppAttestChallenge. (format: byte)
+  --keyId: string # Required. The key ID generated by App Attest for the client app. (format: byte)
+]: any -> record<appCheckToken: record<token: string, ttl: string>, artifact: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($app):exchangeAppAttestAttestation" $qp)
+  let body = {attestationStatement: $attestationStatement, challenge: $challenge, keyId: $keyId} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Validates a custom token signed using your project's Admin SDK service account credentials. If valid, returns an AppCheckToken.
+#
+# POST /v1/{app}:exchangeCustomToken
+# operationId: firebaseappcheck.projects.apps.exchangeCustomToken
+export def "projects firebaseappcheckprojectsappsexchangeCustomToken" [
+  app: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --customToken: string # Required. A custom token signed using your project's Admin SDK service account credentials.
+]: any -> record<token: string, ttl: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($app):exchangeCustomToken" $qp)
+  let body = {customToken: $customToken} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Validates a debug token secret that you have previously created using CreateDebugToken. If valid, returns an AppCheckToken. Note that a restrictive quota is enforced on this method to prevent accidental exposure of the app to abuse.
+#
+# POST /v1/{app}:exchangeDebugToken
+# operationId: firebaseappcheck.projects.apps.exchangeDebugToken
+export def "projects firebaseappcheckprojectsappsexchangeDebugToken" [
+  app: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --debugToken: string # Required. A debug token secret. This string must match a debug token secret previously created using CreateDebugToken.
+]: any -> record<token: string, ttl: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($app):exchangeDebugToken" $qp)
+  let body = {debugToken: $debugToken} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Accepts a [`device_token`](https://developer.apple.com/documentation/devicecheck/dcdevice) issued by DeviceCheck, and attempts to validate it with Apple. If valid, returns an AppCheckToken.
+#
+# POST /v1/{app}:exchangeDeviceCheckToken
+# operationId: firebaseappcheck.projects.apps.exchangeDeviceCheckToken
+export def "projects firebaseappcheckprojectsappsexchangeDeviceCheckToken" [
+  app: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --deviceToken: string # Required. The `device_token` as returned by Apple's client-side [DeviceCheck API](https://developer.apple.com/documentation/devicecheck/dcdevice). This is the base64 encoded `Data` (Swift) or `NSData` (ObjC) object.
+]: any -> record<token: string, ttl: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($app):exchangeDeviceCheckToken" $qp)
+  let body = {deviceToken: $deviceToken} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Validates an [integrity verdict response token from Play Integrity](https://developer.android.com/google/play/integrity/verdict#decrypt-verify). If valid, returns an AppCheckToken.
+#
+# POST /v1/{app}:exchangePlayIntegrityToken
+# operationId: firebaseappcheck.projects.apps.exchangePlayIntegrityToken
+export def "projects firebaseappcheckprojectsappsexchangePlayIntegrityToken" [
+  app: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --playIntegrityToken: string # Required. The [integrity verdict response token from Play Integrity](https://developer.android.com/google/play/integrity/verdict#decrypt-verify) issued to your app.
+]: any -> record<token: string, ttl: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($app):exchangePlayIntegrityToken" $qp)
+  let body = {playIntegrityToken: $playIntegrityToken} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Validates a [reCAPTCHA Enterprise response token](https://cloud.google.com/recaptcha-enterprise/docs/create-assessment#retrieve_token). If valid, returns an AppCheckToken.
+#
+# POST /v1/{app}:exchangeRecaptchaEnterpriseToken
+# operationId: firebaseappcheck.projects.apps.exchangeRecaptchaEnterpriseToken
+export def "projects firebaseappcheckprojectsappsexchangeRecaptchaEnterpriseToken" [
+  app: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --recaptchaEnterpriseToken: string # Required. The reCAPTCHA token as returned by the [reCAPTCHA Enterprise JavaScript API](https://cloud.google.com/recaptcha-enterprise/docs/instrument-web-pages).
+]: any -> record<token: string, ttl: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($app):exchangeRecaptchaEnterpriseToken" $qp)
+  let body = {recaptchaEnterpriseToken: $recaptchaEnterpriseToken} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Validates a [reCAPTCHA v3 response token](https://developers.google.com/recaptcha/docs/v3). If valid, returns an AppCheckToken.
+#
+# POST /v1/{app}:exchangeRecaptchaV3Token
+# operationId: firebaseappcheck.projects.apps.exchangeRecaptchaV3Token
+export def "projects firebaseappcheckprojectsappsexchangeRecaptchaV3Token" [
+  app: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --recaptchaV3Token: string # Required. The reCAPTCHA token as returned by the [reCAPTCHA v3 JavaScript API](https://developers.google.com/recaptcha/docs/v3).
+]: any -> record<token: string, ttl: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($app):exchangeRecaptchaV3Token" $qp)
+  let body = {recaptchaV3Token: $recaptchaV3Token} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Validates a [SafetyNet token](https://developer.android.com/training/safetynet/attestation#request-attestation-step). If valid, returns an AppCheckToken.
+#
+# POST /v1/{app}:exchangeSafetyNetToken
+# operationId: firebaseappcheck.projects.apps.exchangeSafetyNetToken
+export def "projects firebaseappcheckprojectsappsexchangeSafetyNetToken" [
+  app: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --safetyNetToken: string # Required. The [SafetyNet attestation response](https://developer.android.com/training/safetynet/attestation#request-attestation-step) issued to your app.
+]: any -> record<token: string, ttl: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($app):exchangeSafetyNetToken" $qp)
+  let body = {safetyNetToken: $safetyNetToken} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Generates a challenge that protects the integrity of an immediately following call to ExchangeAppAttestAttestation or ExchangeAppAttestAssertion. A challenge should not be reused for multiple calls.
+#
+# POST /v1/{app}:generateAppAttestChallenge
+# operationId: firebaseappcheck.projects.apps.generateAppAttestChallenge
+export def "projects firebaseappcheckprojectsappsgenerateAppAttestChallenge" [
+  app: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --body: record
+]: any -> record<challenge: string, ttl: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($app):generateAppAttestChallenge" $qp)
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Generates a challenge that protects the integrity of an immediately following integrity verdict request to the Play Integrity API. The next call to ExchangePlayIntegrityToken using the resulting integrity token will verify the presence and validity of the challenge. A challenge should not be reused for multiple calls.
+#
+# POST /v1/{app}:generatePlayIntegrityChallenge
+# operationId: firebaseappcheck.projects.apps.generatePlayIntegrityChallenge
+export def "projects firebaseappcheckprojectsappsgeneratePlayIntegrityChallenge" [
+  app: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --body: record
+]: any -> record<challenge: string, ttl: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($app):generatePlayIntegrityChallenge" $qp)
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Deletes the specified DebugToken. A deleted debug token cannot be used to exchange for an App Check token. Use this method when you suspect the secret `token` has been compromised or when you no longer need the debug token.
+#
+# DELETE /v1/{name}
+# operationId: firebaseappcheck.projects.apps.debugTokens.delete
+export def "projects firebaseappcheckprojectsappsdebugTokensdelete" [
+  name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+]: nothing -> record {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($name)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Gets the Service configuration for the specified service name.
+#
+# GET /v1/{name}
+# operationId: firebaseappcheck.projects.services.get
+export def "projects firebaseappcheckprojectsservicesget" [
+  name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+]: nothing -> record<enforcementMode: string, name: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($name)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Updates the specified Service configuration.
+#
+# PATCH /v1/{name}
+# operationId: firebaseappcheck.projects.services.patch
+export def "projects firebaseappcheckprojectsservicespatch" [
+  name: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --updateMask: string # Required. A comma-separated list of names of fields in the Service to update. Example: `enforcement_mode`.
+  --enforcementMode: string@enforcementMode-completer # Required. The App Check enforcement mode for this service.
+  --body-name: string # Required. The relative resource name of the service configuration object, in the format: ``` projects/{project_number}/services/{service_id} ``` Note that the `service_id` element must be a supported service ID. Currently, the following service IDs are supported: * `firebasestorage.googleapis.com` (Cloud Storage for Firebase) * `firebasedatabase.googleapis.com` (Firebase Realtime Database) * `firestore.googleapis.com` (Cloud Firestore)
+]: any -> record<enforcementMode: string, name: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "updateMask" $updateMask "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($name)" $qp)
+  let body = {enforcementMode: $enforcementMode, name: $body_name} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Atomically gets the AppAttestConfigs for the specified list of apps.
+#
+# GET /v1/{parent}/apps/-/appAttestConfig:batchGet
+# operationId: firebaseappcheck.projects.apps.appAttestConfig.batchGet
+export def "apps-app-attest-config-batch-get firebaseappcheckprojectsappsappAttestConfigbatchGet" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --names: list # Required. The relative resource names of the AppAttestConfigs to retrieve, in the format ``` projects/{project_number}/apps/{app_id}/appAttestConfig ``` A maximum of 100 objects can be retrieved in a batch.
+]: nothing -> record<configs: table<name: string, tokenTtl: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "names" $names "multi")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($parent)/apps/-/appAttestConfig:batchGet" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Atomically gets the DeviceCheckConfigs for the specified list of apps. For security reasons, the `private_key` field is never populated in the response.
+#
+# GET /v1/{parent}/apps/-/deviceCheckConfig:batchGet
+# operationId: firebaseappcheck.projects.apps.deviceCheckConfig.batchGet
+export def "apps-device-check-config-batch-get firebaseappcheckprojectsappsdeviceCheckConfigbatchGet" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --names: list # Required. The relative resource names of the DeviceCheckConfigs to retrieve, in the format ``` projects/{project_number}/apps/{app_id}/deviceCheckConfig ``` A maximum of 100 objects can be retrieved in a batch.
+]: nothing -> record<configs: table<keyId: string, name: string, privateKey: string, privateKeySet: bool, tokenTtl: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "names" $names "multi")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($parent)/apps/-/deviceCheckConfig:batchGet" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Atomically gets the PlayIntegrityConfigs for the specified list of apps.
+#
+# GET /v1/{parent}/apps/-/playIntegrityConfig:batchGet
+# operationId: firebaseappcheck.projects.apps.playIntegrityConfig.batchGet
+export def "apps-play-integrity-config-batch-get firebaseappcheckprojectsappsplayIntegrityConfigbatchGet" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --names: list # Required. The relative resource names of the PlayIntegrityConfigs to retrieve, in the format ``` projects/{project_number}/apps/{app_id}/playIntegrityConfig ``` A maximum of 100 objects can be retrieved in a batch.
+]: nothing -> record<configs: table<name: string, tokenTtl: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "names" $names "multi")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($parent)/apps/-/playIntegrityConfig:batchGet" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Atomically gets the RecaptchaEnterpriseConfigs for the specified list of apps.
+#
+# GET /v1/{parent}/apps/-/recaptchaEnterpriseConfig:batchGet
+# operationId: firebaseappcheck.projects.apps.recaptchaEnterpriseConfig.batchGet
+export def "apps-recaptcha-enterprise-config-batch-get firebaseappcheckprojectsappsrecaptchaEnterpriseConfigbatchGet" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --names: list # Required. The relative resource names of the RecaptchaEnterpriseConfigs to retrieve, in the format: ``` projects/{project_number}/apps/{app_id}/recaptchaEnterpriseConfig ``` A maximum of 100 objects can be retrieved in a batch.
+]: nothing -> record<configs: table<name: string, siteKey: string, tokenTtl: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "names" $names "multi")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($parent)/apps/-/recaptchaEnterpriseConfig:batchGet" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Atomically gets the RecaptchaV3Configs for the specified list of apps. For security reasons, the `site_secret` field is never populated in the response.
+#
+# GET /v1/{parent}/apps/-/recaptchaV3Config:batchGet
+# operationId: firebaseappcheck.projects.apps.recaptchaV3Config.batchGet
+export def "apps-recaptcha-v3-config-batch-get firebaseappcheckprojectsappsrecaptchaV3ConfigbatchGet" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --names: list # Required. The relative resource names of the RecaptchaV3Configs to retrieve, in the format: ``` projects/{project_number}/apps/{app_id}/recaptchaV3Config ``` A maximum of 100 objects can be retrieved in a batch.
+]: nothing -> record<configs: table<name: string, siteSecret: string, siteSecretSet: bool, tokenTtl: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "names" $names "multi")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($parent)/apps/-/recaptchaV3Config:batchGet" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Atomically gets the SafetyNetConfigs for the specified list of apps.
+#
+# GET /v1/{parent}/apps/-/safetyNetConfig:batchGet
+# operationId: firebaseappcheck.projects.apps.safetyNetConfig.batchGet
+export def "apps-safety-net-config-batch-get firebaseappcheckprojectsappssafetyNetConfigbatchGet" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --names: list # Required. The relative resource names of the SafetyNetConfigs to retrieve, in the format ``` projects/{project_number}/apps/{app_id}/safetyNetConfig ``` A maximum of 100 objects can be retrieved in a batch.
+]: nothing -> record<configs: table<name: string, tokenTtl: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "names" $names "multi")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($parent)/apps/-/safetyNetConfig:batchGet" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Lists all DebugTokens for the specified app. For security reasons, the `token` field is never populated in the response.
+#
+# GET /v1/{parent}/debugTokens
+# operationId: firebaseappcheck.projects.apps.debugTokens.list
+export def "debug-tokens firebaseappcheckprojectsappsdebugTokenslist" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --pageSize: int # The maximum number of DebugTokens to return in the response. Note that an app can have at most 20 debug tokens. The server may return fewer than this at its own discretion. If no value is specified (or too large a value is specified), the server will impose its own limit.
+  --pageToken: string # Token returned from a previous call to ListDebugTokens indicating where in the set of DebugTokens to resume listing. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListDebugTokens must match the call that provided the page token; if they do not match, the result is undefined.
+]: nothing -> record<debugTokens: table<displayName: string, name: string, token: string>, nextPageToken: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($parent)/debugTokens" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Creates a new DebugToken for the specified app. For security reasons, after the creation operation completes, the `token` field cannot be updated or retrieved, but you can revoke the debug token using DeleteDebugToken. Each app can have a maximum of 20 debug tokens.
+#
+# POST /v1/{parent}/debugTokens
+# operationId: firebaseappcheck.projects.apps.debugTokens.create
+export def "debug-tokens firebaseappcheckprojectsappsdebugTokenscreate" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --displayName: string # Required. A human readable display name used to identify this debug token.
+  --name: string # Required. The relative resource name of the debug token, in the format: ``` projects/{project_number}/apps/{app_id}/debugTokens/{debug_token_id} ```
+  --body-token: string # Required. Input only. Immutable. The secret token itself. Must be provided during creation, and must be a UUID4, case insensitive. This field is immutable once set, and cannot be provided during an UpdateDebugToken request. You can, however, delete this debug token using DeleteDebugToken to revoke it. For security reasons, this field will never be populated in any response.
+]: any -> record<displayName: string, name: string, token: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($parent)/debugTokens" $qp)
+  let body = {displayName: $displayName, name: $name, token: $body_token} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Lists all Service configurations for the specified project. Only Services which were explicitly configured using UpdateService or BatchUpdateServices will be returned.
+#
+# GET /v1/{parent}/services
+# operationId: firebaseappcheck.projects.services.list
+export def "services firebaseappcheckprojectsserviceslist" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --pageSize: int # The maximum number of Services to return in the response. Only explicitly configured services are returned. The server may return fewer than this at its own discretion. If no value is specified (or too large a value is specified), the server will impose its own limit.
+  --pageToken: string # Token returned from a previous call to ListServices indicating where in the set of Services to resume listing. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ListServices must match the call that provided the page token; if they do not match, the result is undefined.
+]: nothing -> record<nextPageToken: string, services: table<enforcementMode: string, name: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "pageToken" $pageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($parent)/services" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Atomically updates the specified Service configurations.
+#
+# POST /v1/{parent}/services:batchUpdate
+# operationId: firebaseappcheck.projects.services.batchUpdate
+# --requests item shape: {service?: record, updateMask?: string}
+export def "services-batch-update firebaseappcheckprojectsservicesbatchUpdate" [
+  parent: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --xgafv: string@xgafv-completer # V1 error format.
+  --access-token: string # OAuth access token.
+  --alt: string@alt-completer # Data format for response.
+  --callback: string # JSONP
+  --qp-fields: string # Selector specifying which fields to include in a partial response.
+  --key: string # API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.
+  --oauth-token: string # OAuth 2.0 token for the current user.
+  --prettyPrint: oneof<nothing, bool> # Returns response with indentations and line breaks.
+  --quotaUser: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
+  --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
+  --uploadType: string # Legacy upload protocol for media (e.g. "media", "multipart").
+  --requests: list # Required. The request messages specifying the Services to update. A maximum of 100 objects can be updated in a batch. — item shape: {service?: record, updateMask?: string}
+  --updateMask: string # Optional. A comma-separated list of names of fields in the Services to update. Example: `display_name`. If the `update_mask` field is set in both this request and any of the UpdateServiceRequest messages, they must match or the entire batch fails and no updates will be committed. (format: google-fieldmask)
+]: any -> record<services: table<enforcementMode: string, name: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $qp_fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $prettyPrint "scalar") (serialize-qp "quotaUser" $quotaUser "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $uploadType "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/($parent)/services:batchUpdate" $qp)
+  let body = {requests: $requests, updateMask: $updateMask} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}

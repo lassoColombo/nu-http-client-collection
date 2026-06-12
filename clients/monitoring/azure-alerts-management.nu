@@ -1,0 +1,618 @@
+# Auto-generated client for Azure Alerts Management Service Resource Provider v2019-05-05-preview
+# Source: https://api.apis.guru/v2/specs/azure.com/alertsmanagement-AlertsManagement/2019-05-05-preview/swagger.json
+# Auth: --token flag or $env.AZURE_ALERTS_MANAGEMENT_SERVICE_RESOURCE_PROVIDER_TOKEN
+
+const BASE_URL = "https://management.azure.com"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AZURE_ALERTS_MANAGEMENT_SERVICE_RESOURCE_PROVIDER_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let n = ($name | url encode)
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, dry_run: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  if $dry_run { return {method: $method, url: $req_url, headers: $auth.headers, query_string: $auth.query, content_type: $ct, timeout: $timeout, body: $body} }
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def base-url-completer [] { ["https://management.azure.com"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+# Completers for enum parameters
+def api-version-completer [] { ["2019-05-05-preview"] }
+def identifier-completer [] { ["MonitorServiceList"] }
+def severity-completer [] { ["Sev0" "Sev1" "Sev2" "Sev3" "Sev4"] }
+def monitorService-completer [] { ["ActivityLog Administrative" "ActivityLog Autoscale" "ActivityLog Policy" "ActivityLog Recommendation" "ActivityLog Security" "Application Insights" "Log Analytics" "Nagios" "Platform" "SCOM" "ServiceHealth" "SmartDetector" "VM Insights" "Zabbix"] }
+def monitorCondition-completer [] { ["Fired" "Resolved"] }
+def alertState-completer [] { ["Acknowledged" "Closed" "New"] }
+def sortBy-completer [] { ["alertState" "lastModifiedDateTime" "monitorCondition" "name" "severity" "startDateTime" "targetResource" "targetResourceGroup" "targetResourceName" "targetResourceType"] }
+def sortOrder-completer [] { ["asc" "desc"] }
+def timeRange-completer [] { ["1d" "1h" "30d" "7d"] }
+def newState-completer [] { ["Acknowledged" "Closed" "New"] }
+def groupby-completer [] { ["alertRule" "alertState" "monitorCondition" "monitorService" "severity" "signalType"] }
+def smartGroupState-completer [] { ["Acknowledged" "Closed" "New"] }
+def sortBy-completer-1 [] { ["alertsCount" "lastModifiedDateTime" "severity" "startDateTime" "state"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "dry-run" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-alerts-management-alerts-meta-data MetaData" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# List alerts meta data information based on value of identifier parameter.
+#
+# GET /providers/Microsoft.AlertsManagement/alertsMetaData
+# operationId: Alerts_MetaData
+export def "providers-microsoft-alerts-management-alerts-meta-data MetaData" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string@api-version-completer # client API version
+  --identifier: string@identifier-completer # Identification of the information to be retrieved by API call.
+]: nothing -> record<properties: record<metadataIdentifier: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "identifier" $identifier "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/providers/Microsoft.AlertsManagement/alertsMetaData" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List all operations available through Azure Alerts Management Resource Provider.
+#
+# GET /providers/Microsoft.AlertsManagement/operations
+# operationId: Operations_List
+export def "providers-microsoft-alerts-management-operations List" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string@api-version-completer # client API version
+]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/providers/Microsoft.AlertsManagement/operations" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get all action rule in a given subscription
+#
+# GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/actionRules
+# operationId: ActionRules_ListBySubscription
+export def "subscriptions-providers-microsoft-alerts-management-action-rules ListBySubscription" [
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --targetResourceGroup: string # Filter by target resource group name. Default value is select all.
+  --targetResourceType: string # Filter by target resource type. Default value is select all.
+  --targetResource: string # Filter by target resource( which is full ARM ID) Default value is select all.
+  --severity: string@severity-completer # Filter by severity.  Default value is select all.
+  --monitorService: string@monitorService-completer # Filter by monitor service which generates the alert instance. Default value is select all.
+  --impactedScope: string # filter by impacted/target scope (provide comma separated list for multiple scopes). The value should be an well constructed ARM id of the scope.
+  --description: string # filter by alert rule description
+  --alertRuleId: string # filter by alert rule id
+  --actionGroup: string # filter by action group configured as part of action rule
+  --name: string # filter by action rule name
+  --api-version: string@api-version-completer # client API version
+]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: any>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "targetResourceGroup" $targetResourceGroup "scalar") (serialize-qp "targetResourceType" $targetResourceType "scalar") (serialize-qp "targetResource" $targetResource "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "monitorService" $monitorService "scalar") (serialize-qp "impactedScope" $impactedScope "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "alertRuleId" $alertRuleId "scalar") (serialize-qp "actionGroup" $actionGroup "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AlertsManagement/actionRules" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# List all existing alerts, where the results can be filtered on the basis of multiple parameters (e.g. time range). The results can then be sorted on the basis specific fields, with the default being lastModifiedDateTime. 
+#
+# GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/alerts
+# operationId: Alerts_GetAll
+export def "subscriptions-providers-microsoft-alerts-management-alerts GetAll" [
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --targetResource: string # Filter by target resource( which is full ARM ID) Default value is select all.
+  --targetResourceType: string # Filter by target resource type. Default value is select all.
+  --targetResourceGroup: string # Filter by target resource group name. Default value is select all.
+  --monitorService: string@monitorService-completer # Filter by monitor service which generates the alert instance. Default value is select all.
+  --monitorCondition: string@monitorCondition-completer # Filter by monitor condition which is either 'Fired' or 'Resolved'. Default value is to select all.
+  --severity: string@severity-completer # Filter by severity.  Default value is select all.
+  --alertState: string@alertState-completer # Filter by state of the alert instance. Default value is to select all.
+  --alertRule: string # Filter by specific alert rule.  Default value is to select all.
+  --smartGroupId: string # Filter the alerts list by the Smart Group Id. Default value is none.
+  --includeContext: oneof<nothing, bool> # Include context which has contextual data specific to the monitor service. Default value is false'
+  --includeEgressConfig: oneof<nothing, bool> # Include egress config which would be used for displaying the content in portal.  Default value is 'false'.
+  --pageCount: int # Determines number of alerts returned per page in response. Permissible value is between 1 to 250. When the "includeContent"  filter is selected, maximum value allowed is 25. Default value is 25.
+  --sortBy: string@sortBy-completer # Sort the query results by input field,  Default value is 'lastModifiedDateTime'.
+  --sortOrder: string@sortOrder-completer # Sort the query results order in either ascending or descending.  Default value is 'desc' for time fields and 'asc' for others.
+  --select: string # This filter allows to selection of the fields(comma separated) which would  be part of the essential section. This would allow to project only the  required fields rather than getting entire content.  Default is to fetch all the fields in the essentials section.
+  --timeRange: string@timeRange-completer # Filter by time range by below listed values. Default value is 1 day.
+  --customTimeRange: string # Filter by custom time range in the format <start-time>/<end-time>  where time is in (ISO-8601 format)'. Permissible values is within 30 days from  query time. Either timeRange or customTimeRange could be used but not both. Default is none.
+  --api-version: string@api-version-completer # client API version
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "targetResource" $targetResource "scalar") (serialize-qp "targetResourceType" $targetResourceType "scalar") (serialize-qp "targetResourceGroup" $targetResourceGroup "scalar") (serialize-qp "monitorService" $monitorService "scalar") (serialize-qp "monitorCondition" $monitorCondition "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "alertState" $alertState "scalar") (serialize-qp "alertRule" $alertRule "scalar") (serialize-qp "smartGroupId" $smartGroupId "scalar") (serialize-qp "includeContext" $includeContext "scalar") (serialize-qp "includeEgressConfig" $includeEgressConfig "scalar") (serialize-qp "pageCount" $pageCount "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "timeRange" $timeRange "scalar") (serialize-qp "customTimeRange" $customTimeRange "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AlertsManagement/alerts" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get a specific alert.
+#
+# GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/alerts/{alertId}
+# operationId: Alerts_GetById
+export def "subscriptions-providers-microsoft-alerts-management-alerts GetById" [
+  subscriptionId: string
+  alertId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string@api-version-completer # client API version
+]: nothing -> record<properties: record<context: record, egressConfig: record, essentials: record<alertRule: string, alertState: string, lastModifiedDateTime: string, lastModifiedUserName: string, monitorCondition: string, monitorConditionResolvedDateTime: string, monitorService: string, severity: string, signalType: string, smartGroupId: string, smartGroupingReason: string, sourceCreatedId: string, startDateTime: string, targetResource: string, targetResourceGroup: string, targetResourceName: string, targetResourceType: string>>, id: string, name: string, type: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AlertsManagement/alerts/($alertId)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Change the state of an alert.
+#
+# POST /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/alerts/{alertId}/changestate
+# operationId: Alerts_ChangeState
+export def "subscriptions-providers-microsoft-alerts-management-alerts-changestate ChangeState" [
+  subscriptionId: string
+  alertId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string@api-version-completer # client API version
+  --newState: string@newState-completer # New state of the alert.
+]: nothing -> record<properties: record<context: record, egressConfig: record, essentials: record<alertRule: string, alertState: string, lastModifiedDateTime: string, lastModifiedUserName: string, monitorCondition: string, monitorConditionResolvedDateTime: string, monitorService: string, severity: string, signalType: string, smartGroupId: string, smartGroupingReason: string, sourceCreatedId: string, startDateTime: string, targetResource: string, targetResourceGroup: string, targetResourceName: string, targetResourceType: string>>, id: string, name: string, type: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "newState" $newState "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AlertsManagement/alerts/($alertId)/changestate" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get the history of an alert, which captures any monitor condition changes (Fired/Resolved) and alert state changes (New/Acknowledged/Closed).
+#
+# GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/alerts/{alertId}/history
+# operationId: Alerts_GetHistory
+export def "subscriptions-providers-microsoft-alerts-management-alerts-history GetHistory" [
+  subscriptionId: string
+  alertId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string@api-version-completer # client API version
+]: nothing -> record<properties: record<alertId: string, modifications: list<record>>, id: string, name: string, type: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AlertsManagement/alerts/($alertId)/history" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get a summarized count of your alerts grouped by various parameters (e.g. grouping by 'Severity' returns the count of alerts for each severity).
+#
+# GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/alertsSummary
+# operationId: Alerts_GetSummary
+export def "subscriptions-providers-microsoft-alerts-management-alerts-summary GetSummary" [
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --groupby: string@groupby-completer # This parameter allows the result set to be grouped by input fields (Maximum 2 comma separated fields supported). For example, groupby=severity or groupby=severity,alertstate.
+  --includeSmartGroupsCount: oneof<nothing, bool> # Include count of the SmartGroups as part of the summary. Default value is 'false'.
+  --targetResource: string # Filter by target resource( which is full ARM ID) Default value is select all.
+  --targetResourceType: string # Filter by target resource type. Default value is select all.
+  --targetResourceGroup: string # Filter by target resource group name. Default value is select all.
+  --monitorService: string@monitorService-completer # Filter by monitor service which generates the alert instance. Default value is select all.
+  --monitorCondition: string@monitorCondition-completer # Filter by monitor condition which is either 'Fired' or 'Resolved'. Default value is to select all.
+  --severity: string@severity-completer # Filter by severity.  Default value is select all.
+  --alertState: string@alertState-completer # Filter by state of the alert instance. Default value is to select all.
+  --alertRule: string # Filter by specific alert rule.  Default value is to select all.
+  --timeRange: string@timeRange-completer # Filter by time range by below listed values. Default value is 1 day.
+  --customTimeRange: string # Filter by custom time range in the format <start-time>/<end-time>  where time is in (ISO-8601 format)'. Permissible values is within 30 days from  query time. Either timeRange or customTimeRange could be used but not both. Default is none.
+  --api-version: string@api-version-completer # client API version
+]: nothing -> record<properties: record<groupedby: string, smartGroupsCount: int, total: int, values: list<record>>, id: string, name: string, type: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "groupby" $groupby "scalar") (serialize-qp "includeSmartGroupsCount" $includeSmartGroupsCount "scalar") (serialize-qp "targetResource" $targetResource "scalar") (serialize-qp "targetResourceType" $targetResourceType "scalar") (serialize-qp "targetResourceGroup" $targetResourceGroup "scalar") (serialize-qp "monitorService" $monitorService "scalar") (serialize-qp "monitorCondition" $monitorCondition "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "alertState" $alertState "scalar") (serialize-qp "alertRule" $alertRule "scalar") (serialize-qp "timeRange" $timeRange "scalar") (serialize-qp "customTimeRange" $customTimeRange "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AlertsManagement/alertsSummary" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get all Smart Groups within a specified subscription
+#
+# GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/smartGroups
+# operationId: SmartGroups_GetAll
+export def "subscriptions-providers-microsoft-alerts-management-smart-groups GetAll" [
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --targetResource: string # Filter by target resource( which is full ARM ID) Default value is select all.
+  --targetResourceGroup: string # Filter by target resource group name. Default value is select all.
+  --targetResourceType: string # Filter by target resource type. Default value is select all.
+  --monitorService: string@monitorService-completer # Filter by monitor service which generates the alert instance. Default value is select all.
+  --monitorCondition: string@monitorCondition-completer # Filter by monitor condition which is either 'Fired' or 'Resolved'. Default value is to select all.
+  --severity: string@severity-completer # Filter by severity.  Default value is select all.
+  --smartGroupState: string@smartGroupState-completer # Filter by state of the smart group. Default value is to select all.
+  --timeRange: string@timeRange-completer # Filter by time range by below listed values. Default value is 1 day.
+  --pageCount: int # Determines number of alerts returned per page in response. Permissible value is between 1 to 250. When the "includeContent"  filter is selected, maximum value allowed is 25. Default value is 25.
+  --sortBy: string@sortBy-completer-1 # Sort the query results by input field. Default value is sort by 'lastModifiedDateTime'.
+  --sortOrder: string@sortOrder-completer # Sort the query results order in either ascending or descending.  Default value is 'desc' for time fields and 'asc' for others.
+  --api-version: string@api-version-completer # client API version
+]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "targetResource" $targetResource "scalar") (serialize-qp "targetResourceGroup" $targetResourceGroup "scalar") (serialize-qp "targetResourceType" $targetResourceType "scalar") (serialize-qp "monitorService" $monitorService "scalar") (serialize-qp "monitorCondition" $monitorCondition "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "smartGroupState" $smartGroupState "scalar") (serialize-qp "timeRange" $timeRange "scalar") (serialize-qp "pageCount" $pageCount "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AlertsManagement/smartGroups" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get information related to a specific Smart Group.
+#
+# GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/smartGroups/{smartGroupId}
+# operationId: SmartGroups_GetById
+export def "subscriptions-providers-microsoft-alerts-management-smart-groups GetById" [
+  subscriptionId: string
+  smartGroupId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string@api-version-completer # client API version
+]: nothing -> record<properties: record<alertSeverities: list<record>, alertStates: list<record>, alertsCount: int, lastModifiedDateTime: string, lastModifiedUserName: string, monitorConditions: list<record>, monitorServices: list<record>, nextLink: string, resourceGroups: list<record>, resourceTypes: list<record>, resources: list<record>, severity: string, smartGroupState: string, startDateTime: string>, id: string, name: string, type: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AlertsManagement/smartGroups/($smartGroupId)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Change the state of a Smart Group.
+#
+# POST /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/smartGroups/{smartGroupId}/changeState
+# operationId: SmartGroups_ChangeState
+export def "subscriptions-providers-microsoft-alerts-management-smart-groups-change-state ChangeState" [
+  subscriptionId: string
+  smartGroupId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string@api-version-completer # client API version
+  --newState: string@newState-completer # New state of the alert.
+]: nothing -> record<properties: record<alertSeverities: list<record>, alertStates: list<record>, alertsCount: int, lastModifiedDateTime: string, lastModifiedUserName: string, monitorConditions: list<record>, monitorServices: list<record>, nextLink: string, resourceGroups: list<record>, resourceTypes: list<record>, resources: list<record>, severity: string, smartGroupState: string, startDateTime: string>, id: string, name: string, type: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar") (serialize-qp "newState" $newState "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AlertsManagement/smartGroups/($smartGroupId)/changeState" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get the history a smart group, which captures any Smart Group state changes (New/Acknowledged/Closed) .
+#
+# GET /subscriptions/{subscriptionId}/providers/Microsoft.AlertsManagement/smartGroups/{smartGroupId}/history
+# operationId: SmartGroups_GetHistory
+export def "subscriptions-providers-microsoft-alerts-management-smart-groups-history GetHistory" [
+  subscriptionId: string
+  smartGroupId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string@api-version-completer # client API version
+]: nothing -> record<properties: record<modifications: list<record>, nextLink: string, smartGroupId: string>, id: string, name: string, type: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.AlertsManagement/smartGroups/($smartGroupId)/history" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get all action rules created in a resource group
+#
+# GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AlertsManagement/actionRules
+# operationId: ActionRules_ListByResourceGroup
+export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules ListByResourceGroup" [
+  subscriptionId: string
+  resourceGroupName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --targetResourceGroup: string # Filter by target resource group name. Default value is select all.
+  --targetResourceType: string # Filter by target resource type. Default value is select all.
+  --targetResource: string # Filter by target resource( which is full ARM ID) Default value is select all.
+  --severity: string@severity-completer # Filter by severity.  Default value is select all.
+  --monitorService: string@monitorService-completer # Filter by monitor service which generates the alert instance. Default value is select all.
+  --impactedScope: string # filter by impacted/target scope (provide comma separated list for multiple scopes). The value should be an well constructed ARM id of the scope.
+  --description: string # filter by alert rule description
+  --alertRuleId: string # filter by alert rule id
+  --actionGroup: string # filter by action group configured as part of action rule
+  --name: string # filter by action rule name
+  --api-version: string@api-version-completer # client API version
+]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: any>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "targetResourceGroup" $targetResourceGroup "scalar") (serialize-qp "targetResourceType" $targetResourceType "scalar") (serialize-qp "targetResource" $targetResource "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "monitorService" $monitorService "scalar") (serialize-qp "impactedScope" $impactedScope "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "alertRuleId" $alertRuleId "scalar") (serialize-qp "actionGroup" $actionGroup "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AlertsManagement/actionRules" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Delete action rule
+#
+# DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AlertsManagement/actionRules/{actionRuleName}
+# operationId: ActionRules_Delete
+export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules Delete" [
+  subscriptionId: string
+  resourceGroupName: string
+  actionRuleName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string@api-version-completer # client API version
+]: nothing -> bool {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AlertsManagement/actionRules/($actionRuleName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Get action rule by name
+#
+# GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AlertsManagement/actionRules/{actionRuleName}
+# operationId: ActionRules_GetByName
+export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules GetByName" [
+  subscriptionId: string
+  resourceGroupName: string
+  actionRuleName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string@api-version-completer # client API version
+]: nothing -> record<properties: record<conditions: record<alertContext: record, alertRuleId: record, description: record, monitorCondition: record, monitorService: record, severity: record, targetResourceType: record>, createdAt: string, createdBy: string, description: string, lastModifiedAt: string, lastModifiedBy: string, scope: record<scopeType: string, values: list>, status: string, type: string>, location: string, tags: any> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AlertsManagement/actionRules/($actionRuleName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json"
+}
+
+# Patch action rule
+#
+# PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AlertsManagement/actionRules/{actionRuleName}
+# operationId: ActionRules_Update
+# --properties shape: {status?: "Enabled"|"Disabled"}
+export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules Update" [
+  subscriptionId: string
+  resourceGroupName: string
+  actionRuleName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string@api-version-completer # client API version
+  --properties: any # Action rule properties supported by patch — shape: {status?: "Enabled"|"Disabled"}
+  --tags: record # tags to be updated
+]: any -> record<properties: record<conditions: record<alertContext: record, alertRuleId: record, description: record, monitorCondition: record, monitorService: record, severity: record, targetResourceType: record>, createdAt: string, createdBy: string, description: string, lastModifiedAt: string, lastModifiedBy: string, scope: record<scopeType: string, values: list>, status: string, type: string>, location: string, tags: any> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AlertsManagement/actionRules/($actionRuleName)" $qp)
+  let body = {properties: $properties, tags: $tags} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
+
+# Create/update an action rule
+#
+# PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AlertsManagement/actionRules/{actionRuleName}
+# operationId: ActionRules_CreateUpdate
+# --properties shape: {conditions?: record, description?: string, scope?: record, status?: "Enabled"|"Disabled", type: "Suppression"|"ActionGroup"|"Diagnostics"}
+export def "subscriptions-resource-groups-providers-microsoft-alerts-management-action-rules CreateUpdate" [
+  subscriptionId: string
+  resourceGroupName: string
+  actionRuleName: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --dry-run(-n) # Return the request that would be sent without executing it
+  --api-version: string@api-version-completer # client API version
+  --properties: any # Action rule properties defining scope, conditions, suppression logic for action rule — shape: {conditions?: record, description?: string, scope?: record, status?: "Enabled"|"Disabled", type: "Suppression"|"ActionGroup"|"Diagnostics"}
+  location: string # Resource location
+  --tags: any # Resource tags
+]: any -> record<properties: record<conditions: record<alertContext: record, alertRuleId: record, description: record, monitorCondition: record, monitorService: record, severity: record, targetResourceType: record>, createdAt: string, createdBy: string, description: string, lastModifiedAt: string, lastModifiedBy: string, scope: record<scopeType: string, values: list>, status: string, type: string>, location: string, tags: any> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.AlertsManagement/actionRules/($actionRuleName)" $qp)
+  let body = {properties: $properties, location: $location, tags: $tags} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors "application/json" $body
+}
